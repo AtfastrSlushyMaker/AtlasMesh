@@ -1,0 +1,31 @@
+{
+  "name": "atlasmesh-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.2.4",
+    "@tailwindcss/vite": "^4.2.4",
+    "autoprefixer": "^10.5.0",
+    "cesium": "^1.104",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.14.0",
+    "postcss": "^8.5.12",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "satellite.js": "^4.1.4",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}

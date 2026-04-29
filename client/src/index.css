@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --color-background: #000000;
+  --color-surface: #0a0a0a;
+  --color-surface-hover: #121212;
+  --color-border: #262626;
+  --color-border-highlight: #404040;
+  --color-primary: #ffffff;
+  --color-secondary: #a3a3a3;
+  --color-muted: #525252;
+  
+  --color-layer-aircraft: #38bdf8;
+  --color-layer-ship: #facc15;
+  --color-layer-satellite: #a78bfa;
+  --color-layer-earthquake: #ef4444;
+  --color-layer-event: #f97316;
+  --color-layer-lightning: #fef08a;
+  --color-layer-weather: #3b82f6;
+  --color-layer-launch: #10b981;
+  --color-layer-wildfire: #dc2626;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-primary);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: var(--font-sans);
+  }
+}
+
+.cesium-viewer-bottom {
+  display: none !important;
+}

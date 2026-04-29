@@ -1,0 +1,17 @@
+{
+  "name": "atlasmesh",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "start:server": "npm --workspace server run dev",
+    "start:client": "npm --workspace client run dev",
+    "bootstrap": "npm install"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}
