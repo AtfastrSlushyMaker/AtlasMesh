@@ -41,7 +41,7 @@ export function startEventsSource(
         const categories = e.categories.map((c: any) => c.title) as string[];
         
         // Map EONET categories to our specific layer types to avoid cluttering "Events"
-        let type = 'event';
+        let type: import('../../shared/entity').EntityType = 'event';
         if (categories.includes('Wildfires')) type = 'wildfire';
         else if (categories.includes('Volcanoes')) type = 'volcano';
         else if (categories.includes('Earthquakes')) type = 'earthquake';
