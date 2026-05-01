@@ -6,6 +6,45 @@ export type SatellitePollOptions = {
   url?: string;
 };
 
+const FALLBACK_TLES = [
+  {
+    name: 'ISS (ZARYA)',
+    tle1: '1 25544U 98067A   26122.84576389  .00016480  00000+0  29688-3 0  9994',
+    tle2: '2 25544  51.6410 346.7210 0004767  69.3854  27.3319 15.50084214510620',
+  },
+  {
+    name: 'HST',
+    tle1: '1 20580U 90037B   26122.52002294  .00001366  00000+0  68636-4 0  9994',
+    tle2: '2 20580  28.4694  88.1212 0002618 321.3274  38.7509 15.26281883999863',
+  },
+  {
+    name: 'NOAA 19',
+    tle1: '1 33591U 09005A   26122.80931292  .00000065  00000+0  59473-4 0  9998',
+    tle2: '2 33591  99.1879 150.9265 0014337 286.6635  73.3029 14.12422757884136',
+  },
+  {
+    name: 'TERRA',
+    tle1: '1 25994U 99068A   26122.77949304  .00000069  00000+0  26674-4 0  9993',
+    tle2: '2 25994  98.2101 181.4633 0001129  98.6706 261.4623 14.57109796398480',
+  },
+];
+
+function emitFallbackSatellites(onEntities: (entities: Entity[]) => void) {
+  const fallback = FALLBACK_TLES.map((s, idx) => ({
+    id: `satellite:fallback:${idx + 1}`,
+    type: 'satellite' as const,
+    position: { lat: 0, lon: 0, alt: 0 },
+    timestamp: Date.now(),
+    metadata: {
+      name: s.name,
+      tle1: s.tle1,
+      tle2: s.tle2,
+      fallback: true,
+    },
+  }));
+  onEntities(fallback);
+}
+
 export function startSatellitesSource(
   onEntities: (entities: Entity[]) => void,
   opts?: SatellitePollOptions
@@ -61,6 +100,8 @@ export function startSatellitesSource(
       } else {
         console.warn('Celestrak error:', err.message || err);
       }
+      console.warn('[Satellites] Using fallback TLE set');
+      emitFallbackSatellites(onEntities);
     } finally {
       if (!stopped) {
         timer = setTimeout(fetchAndEmit, intervalMs);

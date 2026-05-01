@@ -19,8 +19,20 @@ export function useEntityLayer({
 }) {
   const entitiesRef = useRef(new Map<string, any>());
   const dataSourceRef = useRef<any>(null);
+  const errorCountRef = useRef<Record<string, number>>({});
 
-  // Initialize CustomDataSource and Clustering
+  const logLayerError = (phase: 'add' | 'update' | 'remove', entityId: string, err: unknown) => {
+    const key = `${phase}:${entityId}`;
+    const count = (errorCountRef.current[key] || 0) + 1;
+    errorCountRef.current[key] = count;
+
+    // Avoid flooding logs for the same failing entity.
+    if (count <= 3) {
+      console.warn(`[Layer:${type}] ${phase} failed for '${entityId}' (attempt ${count})`, err);
+    }
+  };
+
+  // Initialize CustomDataSource.
   useEffect(() => {
     if (!viewer) return;
     
@@ -29,54 +41,9 @@ export function useEntityLayer({
 
     const ds = new Cesium.CustomDataSource(type);
     dataSourceRef.current = ds;
-    
-    // Enable Clustering
-    ds.clustering.enabled = true;
-    ds.clustering.pixelRange = 40;
-    ds.clustering.minimumClusterSize = 3;
 
-    // Custom styling for cluster icons using Canvas for a sleek glowing circle
-    const createClusterIcon = (text: string) => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 64;
-      canvas.height = 64;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return '';
-      
-      // Glow effect
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = '#3b82f6';
-      
-      // Circle background
-      ctx.beginPath();
-      ctx.arc(32, 32, 22, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; // Dark slate background
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#3b82f6';
-      ctx.stroke();
-
-      // Text
-      ctx.shadowBlur = 0;
-      ctx.font = 'bold 14px Inter, sans-serif';
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(text, 32, 32);
-
-      return canvas.toDataURL();
-    };
-
-    ds.clustering.clusterEvent.addEventListener((clusteredEntities: any[], cluster: any) => {
-      cluster.label.show = false; 
-      cluster.billboard.show = true;
-      cluster.billboard.id = cluster.label.id;
-      cluster.billboard.verticalOrigin = Cesium.VerticalOrigin.CENTER;
-      
-      const count = clusteredEntities.length;
-      const text = count >= 1000 ? `${(count / 1000).toFixed(1)}k` : `${count}`;
-      cluster.billboard.image = createClusterIcon(text);
-    });
+    // Explicitly disable clustering so every entity is rendered individually.
+    ds.clustering.enabled = false;
 
     viewer.dataSources.add(ds);
 
@@ -110,10 +77,13 @@ export function useEntityLayer({
           const ent = onAdd(e, ds);
           if (ent) {
             ent._metadata = e.metadata || {};
+            ent._entityType = e.type || type;
             ent._displayName = e.metadata?.name || e.metadata?.callsign || e.metadata?.title || e.metadata?.shipName || e.id;
             entitiesRef.current.set(e.id, ent);
           }
-        } catch (err) { }
+        } catch (err) {
+          logLayerError('add', e.id, err);
+        }
       });
 
       // Process Updates
@@ -124,16 +94,22 @@ export function useEntityLayer({
           try {
             onUpdate(ent, e, ds);
             ent._metadata = e.metadata || {};
-          } catch (err) { }
+            ent._entityType = e.type || type;
+          } catch (err) {
+            logLayerError('update', e.id, err);
+          }
         } else {
           try {
             const newEnt = onAdd(e, ds);
             if (newEnt) {
               newEnt._metadata = e.metadata || {};
+              newEnt._entityType = e.type || type;
               newEnt._displayName = e.metadata?.name || e.metadata?.callsign || e.metadata?.title || e.metadata?.shipName || e.id;
               entitiesRef.current.set(e.id, newEnt);
             }
-          } catch (err) { }
+          } catch (err) {
+            logLayerError('add', e.id, err);
+          }
         }
       });
 
@@ -141,7 +117,11 @@ export function useEntityLayer({
       diff.removed?.forEach((id: string) => {
         const ent = entitiesRef.current.get(id);
         if (ent) {
-          ds.entities.remove(ent);
+          try {
+            ds.entities.remove(ent);
+          } catch (err) {
+            logLayerError('remove', id, err);
+          }
           entitiesRef.current.delete(id);
         }
       });

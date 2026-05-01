@@ -10,10 +10,10 @@ import { startLaunchesSource } from '../sources/launches';
 import { startEventsSource } from '../sources/events';
 import { startEarthquakesSource } from '../sources/earthquakes';
 import { startWeatherSource } from '../sources/weather';
-import { startLightningSource } from '../sources/lightning';
 import { startWildfiresSource } from '../sources/wildfires';
 import { startSubmarineCableSource } from '../sources/cables';
 import { startVolcanoSource } from '../sources/volcanoes';
+import { startFireballsSource } from '../sources/fireballs';
 
 import axios from 'axios';
 import https from 'https';
@@ -92,6 +92,7 @@ const sources = [
   { start: startWildfiresSource, type: 'wildfire' },
   { start: startVolcanoSource, type: 'volcano' },
   { start: startSubmarineCableSource, type: 'cable' },
+  { start: startFireballsSource, type: 'event' },
 ];
 
 sources.forEach(({ start, type }) => {
