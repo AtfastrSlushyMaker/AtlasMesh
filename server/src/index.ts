@@ -21,6 +21,7 @@ import { startWindFarmSource } from '../sources/windfarms';
 import { startIXPSource } from '../sources/ixp';
 import { startStarlinkSource } from '../sources/starlink';
 import { startISSSource } from '../sources/iss';
+import { startAirportSource } from '../sources/airports';
 
 import axios from 'axios';
 import https from 'https';
@@ -244,6 +245,7 @@ const SOURCES = [
   { start: startIXPSource, type: 'ixp', label: 'Internet Exchanges (PeeringDB)' },
   { start: startStarlinkSource, type: 'starlink', label: 'Starlink (Celestrak)' },
   { start: startISSSource, type: 'iss', label: 'ISS (wheretheiss.at)' },
+  { start: startAirportSource, type: 'airport', label: 'Airports (OpenFlights)' },
 ];
 
 console.log('\n🌍 AtlasMesh Server v2.0\n');

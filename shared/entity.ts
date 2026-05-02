@@ -16,7 +16,8 @@ export type EntityType =
   | 'windfarm'
   | 'ixp'
   | 'starlink'
-  | 'iss';
+  | 'iss'
+  | 'airport';
 
 export interface Entity {
   id: string;

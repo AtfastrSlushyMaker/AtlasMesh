@@ -1,22 +1,20 @@
 # AtlasMesh
 
-AtlasMesh is a real-time geospatial visualization platform designed to aggregate, normalize, and display a wide variety of live and historical data sources on a 3D globe. Built with React, TypeScript, CesiumJS, and Node.js.
+Real-time geospatial visualization platform aggregating live and historical data on a 3D globe.
+
+**[atlasmesh.onrender.com](https://atlasmesh.onrender.com)**
 
 ## Features
 
-- **Real-time visualization** of aircraft, ships, satellites, weather, earthquakes, volcanoes, wildfires, lightning, launches, submarine cables, fireballs, and global events
-- **All entities shown at once** — no grouping or aggregation
-- **Occlusion culling** — only entities visible from the current camera view are rendered for performance
-- **Modular data source architecture** — easy to add new sources
-- **Interactive 3D globe** powered by CesiumJS with dark CartoDB basemap
-- **WebSocket-based live updates** with connection health monitoring
+- **Real-time 3D globe** with aircraft, ships, satellites, earthquakes, volcanoes, wildfires, weather, launches, submarine cables, fireballs, and more
+- **17 data sources** — OpenSky, AISStream, Celestrak, USGS, NASA FIRMS/EONET/JPL, Open-Meteo, TeleGeography, PeeringDB, WRI, and others
+- **Occlusion culling** for performance with thousands of entities
+- **Custom cluster icons** per layer type (Starlink logo, satellite icon, etc.)
+- **Real-time movement interpolation** for aircraft and ships using velocity/heading
 - **Fuzzy search** across all entities with ⌘K shortcut
-- **Entity info panels** with tabbed views (Overview, Metadata, Raw JSON)
-- **Keyboard shortcuts** — press `?` for the full list
-- **Glassmorphism UI** with OLED-optimized dark theme
-- **Responsive design** — works on desktop and mobile
-- **Toast notifications** for user feedback
-- **Error boundaries** and loading states for resilience
+- **GPS geolocation** button to find your position on the globe
+- **WebSocket-based live updates** with connection health monitoring
+- **Dark theme** with glassmorphism UI, OLED-optimized
 
 ## Tech Stack
 
@@ -24,73 +22,25 @@ AtlasMesh is a real-time geospatial visualization platform designed to aggregate
 |-------|-----------|
 | Frontend | React 18, TypeScript, Vite |
 | 3D Engine | CesiumJS |
-| Styling | Tailwind CSS v4, CSS Design System |
-| Icons | @mdi/js, Lucide React |
+| Styling | Tailwind CSS v4, CSS custom properties |
 | Backend | Node.js, Express, TypeScript |
-| Realtime | WebSocket (ws) with ping/pong health checks |
-| Shared | TypeScript entity types |
-
-## Project Structure
-
-```
-AtlasMesh/
-├── client/          # Frontend (React, CesiumJS, Vite)
-│   ├── src/
-│   │   ├── components/     # React components
-│   │   │   ├── layers/     # Cesium layer components (memoized)
-│   │   │   └── ErrorBoundary.tsx
-│   │   ├── hooks/          # Custom hooks (WebSocket, fuzzy search, keyboard)
-│   │   ├── ui/             # UI components (AppUI, EntityInfoPanel, Toast, KeyboardHelpModal)
-│   │   ├── cesium/         # Cesium app wrapper
-│   │   ├── styles/         # Design system CSS
-│   │   └── main.tsx
-│   └── vite.config.ts
-├── server/          # Backend (Node.js, Express)
-│   ├── src/
-│   │   └── index.ts        # Server with graceful shutdown, metrics, health
-│   ├── services/
-│   │   └── store.ts        # Entity store with fast diffing
-│   └── sources/            # Data source adapters
-├── shared/          # Shared types and utilities
-│   └── entity.ts
-└── README.md
-```
+| Realtime | WebSocket (ws) with ping/pong |
+| Shared | TypeScript entity types (npm workspaces) |
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js (v18+ recommended)
-- npm or yarn
-
-### Install Dependencies
-
 ```bash
-cd client && npm install
-cd ../server && npm install
+# Install all workspaces
+npm install
+
+# Start backend (port 3000)
+npm run start:server
+
+# Start frontend (port 5173)
+npm run start:client
 ```
-
-### Development
-
-#### Start the Backend
-
-```bash
-cd server
-npm run dev
-```
-
-#### Start the Frontend
-
-```bash
-cd client
-npm run dev
-```
-
-The frontend will be available at [http://localhost:5173](http://localhost:5173).
 
 ### Environment Variables
-
-Some data sources require API credentials:
 
 ```bash
 OPENSKY_USERNAME=your_username
@@ -98,90 +48,75 @@ OPENSKY_PASSWORD=your_password
 AISSTREAM_TOKEN=your_aisstream_token
 ```
 
-## API Endpoints
+## Deployment
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Health check with entity count, uptime, memory |
-| `GET /metrics` | Detailed metrics (connections, messages, CPU, memory) |
-| `GET /api/entities` | List all entities |
-| `GET /api/entities/:id` | Get entity by ID |
-| `GET /api/entities/type/:type` | Filter entities by type |
-| `WS /` | WebSocket for live entity diffs |
+```bash
+# Build both server and client
+npm run build
+
+# Start production server (serves client from dist/)
+npm start
+```
+
+See `render.yaml` for Render deployment config.
+
+## Project Structure
+
+```
+AtlasMesh/
+├── client/          # React + CesiumJS + Vite
+│   └── src/
+│       ├── components/layers/   # Cesium entity layers
+│       ├── hooks/               # WebSocket, search, keyboard
+│       ├── ui/                  # AppUI, EntityInfoPanel, Logo, Toast
+│       ├── cesium/              # Cesium viewer init + culling
+│       └── styles/              # Design system CSS
+├── server/          # Express + WebSocket
+│   ├── src/index.ts             # Server entry with graceful shutdown
+│   ├── services/store.ts        # Entity store with O(n) diffing
+│   └── sources/                 # Data source adapters
+├── shared/          # Shared TypeScript types
+└── render.yaml      # Render deployment config
+```
+
+## Data Sources
+
+| Source | Type | API |
+|--------|------|-----|
+| OpenSky Network | Aircraft | REST |
+| AISStream | Ships | WebSocket |
+| Celestrak | Satellites, Starlink | TLE |
+| Space Devs | Launches | REST |
+| NASA EONET | Global Events | REST |
+| USGS | Earthquakes, Volcanoes | REST |
+| Open-Meteo | Weather | REST |
+| NASA FIRMS | Wildfires | REST |
+| TeleGeography | Submarine Cables | REST |
+| NASA JPL CNEOS | Fireballs | REST |
+| WRI | Power Plants | REST |
+| NASA | Meteorites | REST |
+| Open Renewables | Wind Farms | REST |
+| PeeringDB | Internet Exchanges | REST |
+| wheretheiss.at | ISS | REST |
 
 ## Keyboard Shortcuts
 
-Press `?` anytime to see the full list. Common ones:
-
 | Shortcut | Action |
 |----------|--------|
-| `?` | Show/hide keyboard shortcuts |
+| `?` | Show/hide shortcuts |
 | `⌘K` | Focus search |
-| `R` | Reset camera view |
+| `R` | Reset camera |
 | `=` / `-` | Zoom in / out |
 | `Esc` | Close entity panel |
-| `Ctrl+1` | Toggle Aircraft layer |
-| `Ctrl+2` | Toggle Ships layer |
-| `Ctrl+3` | Toggle Satellites layer |
+| `Ctrl+1` | Toggle Aircraft |
+| `Ctrl+2` | Toggle Ships |
+| `Ctrl+3` | Toggle Satellites |
 
-## Supported Data Sources
+## API
 
-| Source | Type | Endpoint |
-|--------|------|----------|
-| OpenSky Network | Aircraft | REST API |
-| AISStream | Ships | WebSocket |
-| Celestrak | Satellites | TLE data |
-| Space Devs | Launches | REST API |
-| NASA EONET | Global Events | REST API |
-| USGS | Earthquakes, Volcanoes | REST API |
-| Open-Meteo | Weather | REST API |
-| NASA FIRMS | Wildfires | REST API |
-| TeleGeography | Submarine Cables | REST API |
-| NASA JPL CNEOS | Fireballs | REST API |
-| Procedural | Lightning | Generated |
-
-## UI/UX Improvements (v2.0)
-
-- **Design System** — CSS variables, glassmorphism, consistent spacing, z-index scale
-- **Fuzzy Search** — Levenshtein distance + multi-field scoring
-- **Tabbed Entity Panel** — Overview, Metadata, Raw JSON with copy-to-clipboard
-- **Toast Notifications** — Success/error/info feedback
-- **Keyboard Shortcuts** — Full shortcut system with help modal
-- **Error Boundary** — Graceful crash recovery with reload option
-- **Loading Screen** — Animated globe spinner with shimmer progress
-- **Mobile Responsive** — Adaptive sidebar, touch-friendly controls
-- **Layer Categories** — Transport, Space, Natural Hazards, Weather, Infrastructure
-- **Connection Status** — Live indicator with pulse animation
-- **Copy to Clipboard** — ID and JSON copy on entity panel
-
-## Backend Improvements (v2.0)
-
-- **Graceful Shutdown** — SIGTERM/SIGINT handling with 10s timeout
-- **WebSocket Health** — Ping/pong every 30s, stale connection termination
-- **Metrics Endpoint** — Uptime, memory, CPU, message counts
-- **Request Logging** — HTTP method, URL, status, duration
-- **CORS Support** — Cross-origin headers
-- **Fast Diffing** — O(n) change detection instead of JSON.stringify
-- **Fireball Type** — Proper `fireball` entity type instead of generic `event`
-- **Error Resilience** — Per-source error isolation, continues on failure
-
-## Performance
-
-- **Occlusion culling** — Entities on far side of globe hidden (150ms throttle)
-- **React.memo** — All layer components memoized
-- **Imperative updates** — WebSocket diffs bypass React batching
-- **Error throttling** — Max 3 log entries per failing entity
-- **Search limit** — 15,000 indexed entities
-- **Diff-based updates** — Only changed entities re-rendered
-
-## Contributing
-
-Contributions are welcome! Please open issues or pull requests for bugs, features, or suggestions.
-
-## License
-
-TBD (to be determined)
-
----
-
-_This project is under active development. Features, APIs, and structure may change frequently._
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check |
+| `GET /metrics` | Uptime, memory, connections |
+| `GET /api/entities` | All entities |
+| `WS /` | Live entity diffs |

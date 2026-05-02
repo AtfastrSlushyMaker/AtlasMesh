@@ -57,6 +57,7 @@ export const LAYERS: LayerDef[] = [
   { id: 'windfarm', label: 'Wind Farms', color: '#34d399', iconPath: mdiWindTurbine, category: 'energy' },
   { id: 'meteorite', label: 'Meteorites', color: '#fb923c', iconPath: mdiMeteor, category: 'natural' },
   { id: 'ixp', label: 'Internet Exchanges', color: '#818cf8', iconPath: mdiRouterNetwork, category: 'infrastructure' },
+  { id: 'airport', label: 'Airports', color: '#94a3b8', iconPath: mdiAirplane, category: 'infrastructure' },
 ];
 
 const CATEGORY_ORDER: Record<string, number> = {
@@ -127,6 +128,20 @@ export const AppUI = memo(function AppUI({
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' && window.innerWidth < 768
+  );
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Default sidebar closed on mobile
+  useEffect(() => {
+    setSidebarOpen(!isMobile);
+  }, [isMobile]);
 
   const searchResults = useFuzzySearch(searchItems, search, 12);
 
@@ -181,7 +196,6 @@ export const AppUI = memo(function AppUI({
   }, []);
 
   const totalEntities = Object.values(stats).reduce((a, b) => a + b, 0);
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
   return (
     <div
@@ -199,12 +213,13 @@ export const AppUI = memo(function AppUI({
           top: 0,
           left: 0,
           right: 0,
-          padding: isMobile ? '12px' : '20px 24px',
+          padding: isMobile ? 8 : '20px 24px',
           display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
           justifyContent: 'space-between',
-          alignItems: 'flex-start',
+          alignItems: isMobile ? 'stretch' : 'flex-start',
           zIndex: 30,
-          gap: 12,
+          gap: isMobile ? 6 : 12,
         }}
       >
         {/* Left: Title Card */}
@@ -228,11 +243,12 @@ export const AppUI = memo(function AppUI({
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
                 margin: 0,
+                display: isMobile ? 'none' : 'block',
               }}
             >
               AtlasMesh
             </h1>
-            <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.10)' }} />
+            <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.10)', display: isMobile ? 'none' : 'block' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span
                 style={{
@@ -262,14 +278,15 @@ export const AppUI = memo(function AppUI({
         {/* Center: Floating Search */}
         <div
           style={{
-            position: 'absolute',
-            top: isMobile ? 12 : 20,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: isMobile ? 'calc(100% - 24px)' : 420,
-            maxWidth: '60vw',
+            position: isMobile ? 'relative' : 'absolute',
+            top: isMobile ? undefined : 20,
+            left: isMobile ? undefined : '50%',
+            transform: isMobile ? undefined : 'translateX(-50%)',
+            width: isMobile ? '100%' : 420,
+            maxWidth: isMobile ? undefined : '60vw',
             pointerEvents: 'auto',
             zIndex: 35,
+            marginTop: isMobile ? 8 : 0,
           }}
         >
           <div
@@ -407,8 +424,9 @@ export const AppUI = memo(function AppUI({
         </div>
 
         {/* Right: Stats + Controls */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, pointerEvents: 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'row' : 'column', alignItems: isMobile ? 'center' : 'flex-end', gap: isMobile ? 6 : 10, pointerEvents: 'auto' }}>
           {/* Entity Count Card */}
+          {!isMobile && (
           <div
             className="glass-panel"
             style={{
@@ -441,6 +459,7 @@ export const AppUI = memo(function AppUI({
               {totalEntities.toLocaleString()}
             </div>
           </div>
+          )}
 
           {/* Zoom Controls */}
           <div
@@ -448,17 +467,17 @@ export const AppUI = memo(function AppUI({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 4,
-              padding: 6,
+              gap: isMobile ? 2 : 4,
+              padding: isMobile ? '4px 6px' : 6,
               borderRadius: 8,
             }}
           >
-            <IconButton onClick={onZoomOut} title="Zoom Out" icon={mdiMinus} />
-            <IconButton onClick={onResetView} title="Reset View (R)" icon={mdiTarget} accent />
-            <IconButton onClick={onZoomIn} title="Zoom In" icon={mdiPlus} />
-            <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)', margin: '0 4px' }} />
-            <IconButton onClick={onMyLocation} title="My Location" icon={mdiCrosshairsGps} />
-            <IconButton onClick={onToggleHelp} title="Shortcuts (?)" icon={mdiKeyboardOutline} />
+            <IconButton onClick={onZoomOut} title="Zoom Out" icon={mdiMinus} size={isMobile ? 28 : 32} />
+            <IconButton onClick={onResetView} title="Reset View (R)" icon={mdiTarget} accent size={isMobile ? 28 : 32} />
+            <IconButton onClick={onZoomIn} title="Zoom In" icon={mdiPlus} size={isMobile ? 28 : 32} />
+            <div style={{ width: 1, height: isMobile ? 16 : 20, background: 'rgba(255,255,255,0.08)', margin: '0 2px' }} />
+            <IconButton onClick={onMyLocation} title="My Location" icon={mdiCrosshairsGps} size={isMobile ? 28 : 32} />
+            <IconButton onClick={onToggleHelp} title="Shortcuts (?)" icon={mdiKeyboardOutline} size={isMobile ? 28 : 32} />
             {viewer && <MapStyleSwitcher viewer={viewer} />}
           </div>
         </div>
@@ -662,7 +681,8 @@ export const AppUI = memo(function AppUI({
         style={{
           position: 'absolute',
           bottom: 24,
-          left: isMobile ? 12 : 24,
+          left: isMobile ? (sidebarOpen ? undefined : 12) : (sidebarOpen ? 318 : 24),
+          right: isMobile && sidebarOpen ? 12 : undefined,
           width: 42,
           height: 42,
           borderRadius: 10,
@@ -671,8 +691,7 @@ export const AppUI = memo(function AppUI({
           justifyContent: 'center',
           color: '#fff',
           cursor: 'pointer',
-          transition: 'transform var(--transition-slow), left var(--transition-slow)',
-          transform: sidebarOpen ? `translateX(${isMobile ? 'calc(100vw - 48px)' : '318px'})` : 'translateX(0)',
+          transition: 'all var(--transition-slow)',
           pointerEvents: 'auto',
           zIndex: 25,
           border: '1px solid rgba(255,255,255,0.10)',
@@ -695,19 +714,21 @@ function IconButton({
   title,
   icon,
   accent = false,
+  size = 32,
 }: {
   onClick: () => void;
   title: string;
   icon: string;
   accent?: boolean;
+  size?: number;
 }) {
   return (
     <button
       onClick={onClick}
       title={title}
       style={{
-        width: 32,
-        height: 32,
+        width: size,
+        height: size,
         borderRadius: 6,
         border: '1px solid rgba(255,255,255,0.08)',
         background: accent ? 'rgba(56,189,248,0.10)' : 'rgba(255,255,255,0.03)',

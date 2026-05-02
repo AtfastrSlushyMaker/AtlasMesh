@@ -15,6 +15,7 @@ import { WindFarmLayer } from './WindFarmLayer';
 import { IXPLayer } from './IXPLayer';
 import { StarlinkLayer } from './StarlinkLayer';
 import { ISSLayer } from './ISSLayer';
+import { AirportLayer } from './AirportLayer';
 
 interface LayerManagerProps {
   viewer: any;
@@ -42,6 +43,7 @@ export const LayerManager = memo(function LayerManager({ viewer, visibility }: L
       <IXPLayer viewer={viewer} visible={visibility.ixp ?? true} />
       <StarlinkLayer viewer={viewer} visible={visibility.starlink ?? true} />
       <ISSLayer viewer={viewer} visible={visibility.iss ?? true} />
+      <AirportLayer viewer={viewer} visible={visibility.airport ?? true} />
     </>
   );
 });

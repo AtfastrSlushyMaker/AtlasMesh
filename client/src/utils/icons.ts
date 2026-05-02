@@ -82,4 +82,5 @@ export const Icons = {
   ixp: createIcon(mdiRouterNetwork, '#818cf8'),
   starlink: createIcon(mdiStarFourPoints, '#c084fc'),
   iss: createIcon(mdiSpaceStation, '#22d3ee'),
+  airport: createIcon(mdiAirplane, '#94a3b8'),
 };

@@ -46,7 +46,7 @@ class EntityStore {
         // If it's NOT in incomingMap, we check if it's too old
         if (!incomingMap.has(id)) {
           // Age out entities older than 1 hour (except static ones like volcanoes/cables)
-          const isStatic = ['volcano', 'cable', 'powerplant', 'meteorite', 'windfarm', 'ixp'].includes(type);
+          const isStatic = ['volcano', 'cable', 'powerplant', 'meteorite', 'windfarm', 'ixp', 'airport'].includes(type);
           if (!isStatic && (now - existing.timestamp > 60 * 60 * 1000)) {
             this.map.delete(id);
             removed.push(id);

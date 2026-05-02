@@ -1,4 +1,4 @@
-import React, { useState, memo } from 'react';
+import React, { useState, memo, useEffect } from 'react';
 import { X, Copy, Check, ExternalLink } from 'lucide-react';
 import { useToast } from './Toast';
 
@@ -25,6 +25,7 @@ const TYPE_LABELS: Record<string, string> = {
   cable: 'Submarine Cable',
   volcano: 'Volcano',
   fireball: 'Meteor Fireball',
+  airport: 'Airport',
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -39,6 +40,7 @@ const TYPE_COLORS: Record<string, string> = {
   cable: '#00ffaa',
   volcano: '#ff6b35',
   fireball: '#f472b6',
+  airport: '#94a3b8',
 };
 
 function formatValue(key: string, value: any): string {
@@ -60,7 +62,16 @@ const HIDDEN_KEYS = new Set(['raw', 'path', 'sources', '__v', '_id']);
 export const EntityInfoPanel = memo(function EntityInfoPanel({ entity, onClose }: EntityInfoPanelProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'metadata' | 'raw'>('overview');
   const [copied, setCopied] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' && window.innerWidth < 768
+  );
   const toast = useToast();
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const color = TYPE_COLORS[entity.type] || '#fff';
   const label = TYPE_LABELS[entity.type] || entity.type;
@@ -87,10 +98,11 @@ export const EntityInfoPanel = memo(function EntityInfoPanel({ entity, onClose }
     <div
       style={{
         position: 'absolute',
-        top: 96,
-        right: 24,
-        width: 340,
-        maxHeight: 'calc(100vh - 120px)',
+        top: isMobile ? undefined : 96,
+        right: isMobile ? 8 : 24,
+        bottom: isMobile ? 24 : undefined,
+        width: isMobile ? 'calc(100vw - 16px)' : 340,
+        maxHeight: isMobile ? '50vh' : 'calc(100vh - 120px)',
         background: 'rgba(8,12,24,0.92)',
         backdropFilter: 'blur(24px) saturate(140%)',
         border: '1px solid rgba(255,255,255,0.08)',
