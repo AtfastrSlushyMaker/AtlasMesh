@@ -682,28 +682,34 @@ export const AppUI = memo(function AppUI({
         style={{
           position: 'absolute',
           bottom: 24,
-          left: isMobile ? (sidebarOpen ? undefined : 12) : (sidebarOpen ? 318 : 24),
+          left: isMobile ? (sidebarOpen ? undefined : '50%') : (sidebarOpen ? 318 : 24),
           right: isMobile && sidebarOpen ? 12 : undefined,
-          width: 42,
-          height: 42,
+          transform: isMobile && !sidebarOpen ? 'translateX(-50%)' : undefined,
+          width: isMobile ? 'auto' : 42,
+          height: isMobile ? 48 : 42,
+          padding: isMobile ? '0 20px' : 0,
           borderRadius: 10,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          gap: isMobile ? 10 : 0,
           color: '#fff',
           cursor: 'pointer',
           transition: 'all var(--transition-slow)',
           pointerEvents: 'auto',
           zIndex: 25,
-          border: '1px solid rgba(255,255,255,0.10)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          fontSize: isMobile ? 13 : undefined,
+          fontWeight: isMobile ? 500 : undefined,
         }}
-        title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+        title={sidebarOpen ? 'Close filters' : 'Open filters'}
       >
         <MdiIcon
           path={sidebarOpen ? mdiMenuOpen : mdiMenu}
-          size={20}
+          size={isMobile ? 18 : 20}
           color="#ffffff"
         />
+        {isMobile && <span>Filters</span>}
       </button>
     </div>
   );
