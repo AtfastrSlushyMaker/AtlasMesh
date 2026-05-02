@@ -9,7 +9,9 @@
   "scripts": {
     "start:server": "npm --workspace server run dev",
     "start:client": "npm --workspace client run dev",
-    "bootstrap": "npm install"
+    "bootstrap": "npm install",
+    "build": "npm --workspace server run build && npm --workspace client run build",
+    "start": "npm --workspace server run start"
   },
   "dependencies": {
     "dotenv": "^17.4.2"

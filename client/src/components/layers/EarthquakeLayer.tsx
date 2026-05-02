@@ -9,7 +9,7 @@ export function EarthquakeLayer({ viewer, visible }: LayerProps) {
     onAdd: (e, v) => {
       if (!Cesium) return null;
       const mag = e.metadata?.mag || 1;
-      const radius = Math.pow(10, mag) * 10; // Simple scaling for visual effect
+      const radius = Math.pow(mag, 3) * 500;
       
       return v.entities.add({
         id: e.id,
@@ -18,6 +18,7 @@ export function EarthquakeLayer({ viewer, visible }: LayerProps) {
           image: Icons.earthquake,
           scale: 0.6,
           color: Cesium.Color.fromCssColorString('#ef4444'),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000000),
         },
         ellipse: {
           semiMinorAxis: radius,

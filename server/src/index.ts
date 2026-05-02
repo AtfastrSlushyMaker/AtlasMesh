@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import path from 'path';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { startAircraftSource } from '../sources/aircraft';
@@ -14,7 +15,6 @@ import { startWildfiresSource } from '../sources/wildfires';
 import { startSubmarineCableSource } from '../sources/cables';
 import { startVolcanoSource } from '../sources/volcanoes';
 import { startFireballsSource } from '../sources/fireballs';
-import { startLightningSource } from '../sources/lightning';
 import { startPowerPlantSource } from '../sources/powerplants';
 import { startMeteoriteSource } from '../sources/meteorites';
 import { startWindFarmSource } from '../sources/windfarms';
@@ -60,6 +60,16 @@ app.use((_req, res, next) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   next();
 });
+
+// ===== Production: serve client build =====
+const clientDist = path.resolve(__dirname, '..', '..', '..', '..', 'client', 'dist');
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+  console.log(`[Server] Serving client from ${clientDist}`);
+}
 
 // ===== Health Check =====
 app.get('/health', (_req, res) => {
@@ -228,7 +238,6 @@ const SOURCES = [
   { start: startVolcanoSource, type: 'volcano', label: 'Volcanoes (USGS)' },
   { start: startSubmarineCableSource, type: 'cable', label: 'Cables (TeleGeography)' },
   { start: startFireballsSource, type: 'fireball', label: 'Fireballs (NASA JPL)' },
-  { start: startLightningSource, type: 'lightning', label: 'Lightning (Procedural)' },
   { start: startPowerPlantSource, type: 'powerplant', label: 'Power Plants (WRI)' },
   { start: startMeteoriteSource, type: 'meteorite', label: 'Meteorites (NASA)' },
   { start: startWindFarmSource, type: 'windfarm', label: 'Wind Farms (Open)' },

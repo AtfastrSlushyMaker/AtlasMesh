@@ -7,7 +7,6 @@ export type EntityType =
   | 'event'
   | 'earthquake'
   | 'weather'
-  | 'lightning'
   | 'wildfire'
   | 'cable'
   | 'volcano'

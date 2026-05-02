@@ -54,9 +54,11 @@ export function startMeteoriteSource(
         });
       }
 
-      console.log(`[Meteorites] Fetched ${entities.length} meteorites (skipped ${skipped})`);
-      if (entities.length > 0) {
-        onEntities(entities);
+      const sorted = entities.sort((a, b) => (b.metadata.massGrams || 0) - (a.metadata.massGrams || 0));
+      const capped = sorted.slice(0, 10000);
+      console.log(`[Meteorites] Fetched ${capped.length} meteorites (from ${entities.length} total, skipped ${skipped})`);
+      if (capped.length > 0) {
+        onEntities(capped);
       }
     } catch (err: any) {
       console.warn('[Meteorites] Error:', err?.message || err);

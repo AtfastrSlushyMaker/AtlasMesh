@@ -7,6 +7,7 @@ export const PowerPlantLayer = memo(function PowerPlantLayer({ viewer, visible }
 
   useEntityLayer({
     viewer, visible, type: 'powerplant',
+    cluster: { pixelRange: 20, minimumClusterSize: 8, clusterIcon: Icons.powerplant },
     onAdd: (e, v) => {
       if (!Cesium) return null;
       const fuel = e.metadata?.primaryFuel || '';
@@ -18,6 +19,7 @@ export const PowerPlantLayer = memo(function PowerPlantLayer({ viewer, visible }
           image: Icons.powerplant,
           scale,
           color: Cesium.Color.fromCssColorString('#fbbf24'),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3000000),
         },
         label: {
           text: `${e.metadata?.name || 'Plant'}${fuel ? ` (${fuel})` : ''}`,

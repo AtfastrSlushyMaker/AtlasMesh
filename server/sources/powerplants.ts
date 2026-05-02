@@ -72,9 +72,11 @@ export function startPowerPlantSource(
         });
       }
 
-      console.log(`[PowerPlants] Fetched ${entities.length} plants (skipped ${skipped} rows)`);
-      if (entities.length > 0) {
-        onEntities(entities);
+      const sorted = entities.sort((a, b) => (b.metadata.capacityMw || 0) - (a.metadata.capacityMw || 0));
+      const capped = sorted.slice(0, 5000);
+      console.log(`[PowerPlants] Fetched ${capped.length} plants (from ${entities.length} total, skipped ${skipped} rows)`);
+      if (capped.length > 0) {
+        onEntities(capped);
       } else {
         throw new Error('No valid plants parsed');
       }

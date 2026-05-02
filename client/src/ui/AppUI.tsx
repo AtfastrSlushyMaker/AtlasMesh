@@ -7,8 +7,6 @@ import {
   mdiFactory,
   mdiFerry,
   mdiFire,
-  mdiGlobeLight,
-  mdiLightningBolt,
   mdiMagnify,
   mdiMenu,
   mdiMenuOpen,
@@ -31,6 +29,7 @@ import {
 import { useFuzzySearch } from '../hooks/useFuzzySearch';
 import { useToast } from './Toast';
 import { MapStyleSwitcher } from '../components/MapStyleSwitcher';
+import { Logo } from './Logo';
 
 export interface LayerDef {
   id: string;
@@ -48,7 +47,6 @@ export const LAYERS: LayerDef[] = [
   { id: 'earthquake', label: 'Earthquakes', color: '#ef4444', iconPath: mdiTsunami, category: 'natural' },
   { id: 'event', label: 'Global Events', color: '#f97316', iconPath: mdiBroadcast, category: 'natural' },
   { id: 'wildfire', label: 'Wildfires', color: '#dc2626', iconPath: mdiFire, category: 'natural' },
-  { id: 'lightning', label: 'Lightning', color: '#fef08a', iconPath: mdiLightningBolt, category: 'weather' },
   { id: 'weather', label: 'Weather', color: '#3b82f6', iconPath: mdiWeatherCloudy, category: 'weather' },
   { id: 'cable', label: 'Subsea Cables', color: '#00ffaa', iconPath: mdiCableData, category: 'infrastructure' },
   { id: 'volcano', label: 'Volcanoes', color: '#ff6b35', iconPath: mdiVolcano, category: 'natural' },
@@ -97,6 +95,7 @@ interface AppUIProps {
   onZoomOut: () => void;
   onResetView: () => void;
   onToggleHelp: () => void;
+  onMyLocation?: () => void;
   viewer?: any;
 }
 
@@ -119,6 +118,7 @@ export const AppUI = memo(function AppUI({
   onZoomOut,
   onResetView,
   onToggleHelp,
+  onMyLocation,
   viewer,
 }: AppUIProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -219,7 +219,7 @@ export const AppUI = memo(function AppUI({
               borderRadius: 8,
             }}
           >
-            <MdiIcon path={mdiGlobeLight} size={18} color="#ffffff" />
+            <Logo size={26} />
             <h1
               style={{
                 fontSize: 13,
@@ -457,6 +457,7 @@ export const AppUI = memo(function AppUI({
             <IconButton onClick={onResetView} title="Reset View (R)" icon={mdiTarget} accent />
             <IconButton onClick={onZoomIn} title="Zoom In" icon={mdiPlus} />
             <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)', margin: '0 4px' }} />
+            <IconButton onClick={onMyLocation} title="My Location" icon={mdiCrosshairsGps} />
             <IconButton onClick={onToggleHelp} title="Shortcuts (?)" icon={mdiKeyboardOutline} />
             {viewer && <MapStyleSwitcher viewer={viewer} />}
           </div>

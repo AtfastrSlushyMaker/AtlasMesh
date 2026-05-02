@@ -6,20 +6,29 @@ export interface LayerProps {
   visible: boolean;
 }
 
+export interface ClusterConfig {
+  pixelRange?: number;
+  minimumClusterSize?: number;
+  clusterIcon?: string;
+}
+
 export function useEntityLayer({
   viewer,
   visible,
   type,
   onAdd,
-  onUpdate
+  onUpdate,
+  cluster,
 }: LayerProps & {
   type: string;
   onAdd: (entity: any, dataSource: any) => any;
   onUpdate: (cesiumEntity: any, updatedData: any, dataSource: any) => void;
+  cluster?: ClusterConfig;
 }) {
   const entitiesRef = useRef(new Map<string, any>());
   const dataSourceRef = useRef<any>(null);
   const errorCountRef = useRef<Record<string, number>>({});
+  const clusterListenerRef = useRef<(() => void) | null>(null);
 
   const logLayerError = (phase: 'add' | 'update' | 'remove', entityId: string, err: unknown) => {
     const key = `${phase}:${entityId}`;
@@ -35,19 +44,57 @@ export function useEntityLayer({
   // Initialize CustomDataSource.
   useEffect(() => {
     if (!viewer) return;
-    
+
     const Cesium = (viewer as any).__cesium;
     if (!Cesium) return;
 
     const ds = new Cesium.CustomDataSource(type);
     dataSourceRef.current = ds;
 
-    // Explicitly disable clustering so every entity is rendered individually.
-    ds.clustering.enabled = false;
+    if (cluster) {
+      ds.clustering.enabled = true;
+      ds.clustering.pixelRange = cluster.pixelRange ?? 50;
+      ds.clustering.minimumClusterSize = cluster.minimumClusterSize ?? 3;
+
+      if (cluster.clusterIcon) {
+        const iconUrl = cluster.clusterIcon;
+        const removeListener = (ds.clustering as any).clusterEvent.addEventListener(
+          (clusteredEntities: any[], clusterEntity: any) => {
+            const count = clusteredEntities.length;
+
+            clusterEntity.label.show = true;
+            clusterEntity.label.text = String(count);
+            clusterEntity.label.font = 'bold 10px "Inter", sans-serif';
+            clusterEntity.label.fillColor = Cesium.Color.WHITE;
+            clusterEntity.label.outlineColor = Cesium.Color.fromCssColorString('#000000').withAlpha(0.7);
+            clusterEntity.label.outlineWidth = 3;
+            clusterEntity.label.style = Cesium.LabelStyle.FILL;
+            clusterEntity.label.pixelOffset = new Cesium.Cartesian2(0, -22);
+            clusterEntity.label.scale = 0.65;
+            clusterEntity.label.horizontalOrigin = Cesium.HorizontalOrigin.CENTER;
+            clusterEntity.label.verticalOrigin = Cesium.VerticalOrigin.BOTTOM;
+            clusterEntity.label.showBackground = true;
+            clusterEntity.label.backgroundColor = new Cesium.Color(0.05, 0.05, 0.08, 0.7);
+            clusterEntity.label.backgroundPadding = new Cesium.Cartesian2(5, 3);
+
+            clusterEntity.billboard.show = true;
+            clusterEntity.billboard.image = iconUrl;
+            clusterEntity.billboard.scale = 0.35 + Math.min(count, 50) * 0.008;
+          }
+        );
+        clusterListenerRef.current = removeListener;
+      }
+    } else {
+      ds.clustering.enabled = false;
+    }
 
     viewer.dataSources.add(ds);
 
     return () => {
+      if (clusterListenerRef.current) {
+        clusterListenerRef.current();
+        clusterListenerRef.current = null;
+      }
       viewer.dataSources.remove(ds);
     };
   }, [viewer, type]);

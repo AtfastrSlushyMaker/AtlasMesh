@@ -7,6 +7,7 @@ export const WindFarmLayer = memo(function WindFarmLayer({ viewer, visible }: La
 
   useEntityLayer({
     viewer, visible, type: 'windfarm',
+    cluster: { pixelRange: 20, minimumClusterSize: 8, clusterIcon: Icons.windfarm },
     onAdd: (e, v) => {
       if (!Cesium) return null;
       const scale = Math.max(0.3, Math.min(0.85, Math.log10((e.metadata?.capacityMw || 1) + 5) * 0.25));
@@ -17,6 +18,7 @@ export const WindFarmLayer = memo(function WindFarmLayer({ viewer, visible }: La
           image: Icons.windfarm,
           scale,
           color: Cesium.Color.fromCssColorString('#34d399'),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3000000),
         },
         label: {
           text: `${e.metadata?.name || 'Wind Farm'}${e.metadata?.capacityMw ? ` (${e.metadata.capacityMw}MW)` : ''}`,

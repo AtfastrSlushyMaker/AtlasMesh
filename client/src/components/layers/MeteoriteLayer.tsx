@@ -7,6 +7,7 @@ export const MeteoriteLayer = memo(function MeteoriteLayer({ viewer, visible }: 
 
   useEntityLayer({
     viewer, visible, type: 'meteorite',
+    cluster: { pixelRange: 18, minimumClusterSize: 10, clusterIcon: Icons.meteorite },
     onAdd: (e, v) => {
       if (!Cesium) return null;
       const massG = e.metadata?.massGrams;
@@ -18,6 +19,7 @@ export const MeteoriteLayer = memo(function MeteoriteLayer({ viewer, visible }: 
           image: Icons.meteorite,
           scale,
           color: Cesium.Color.fromCssColorString('#fb923c'),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3000000),
         },
         label: {
           text: e.metadata?.name || 'Meteorite',

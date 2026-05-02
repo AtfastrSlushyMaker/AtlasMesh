@@ -70,9 +70,11 @@ export function startWindFarmSource(
         });
       }
 
-      console.log(`[WindFarms] Fetched ${entities.length} wind farms (skipped ${skipped})`);
-      if (entities.length > 0) {
-        onEntities(entities);
+      const sorted = entities.sort((a, b) => (b.metadata.capacityMw || 0) - (a.metadata.capacityMw || 0));
+      const capped = sorted.slice(0, 3000);
+      console.log(`[WindFarms] Fetched ${capped.length} wind farms (from ${entities.length} total, skipped ${skipped})`);
+      if (capped.length > 0) {
+        onEntities(capped);
       } else {
         throw new Error('No wind farms parsed');
       }

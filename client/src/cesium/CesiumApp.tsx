@@ -16,7 +16,12 @@ function CesiumAppInner() {
   const cullLastRunAtRef = useRef(0);
   const [viewerReady, setViewerReady] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { connected, lastMessage } = useWebSocket(viewerReady ? 'ws://localhost:3000' : null);
+  const wsUrl = viewerReady
+    ? (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+        ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
+        : 'ws://localhost:3000')
+    : null;
+  const { connected, lastMessage } = useWebSocket(wsUrl);
   const [visibility, setVisibility] = useState<Record<string, boolean>>({});
   const [stats, setStats] = useState<Record<string, number>>({});
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
@@ -335,6 +340,31 @@ function CesiumAppInner() {
     // This is a no-op but required for prop typing
   }, []);
 
+  const onMyLocation = useCallback(() => {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const viewer = viewerRef.current;
+        if (!viewer || viewer.isDestroyed()) return;
+        const CesiumRef = (viewer as any).__cesium;
+        if (!CesiumRef) return;
+
+        viewer.camera.flyTo({
+          destination: CesiumRef.Cartesian3.fromDegrees(pos.coords.longitude, pos.coords.latitude, 150000),
+          duration: 1.5,
+          complete: () => {
+            viewer.camera.moveBackward(2000000);
+          },
+        });
+      },
+      (err) => {
+        console.warn('Geolocation error:', err.message);
+      },
+      { timeout: 5000, enableHighAccuracy: false }
+    );
+  }, []);
+
   // Keyboard shortcuts
   const shortcuts: Shortcut[] = [
     { key: 'r', description: 'Reset camera view', action: onResetView },
@@ -355,7 +385,7 @@ function CesiumAppInner() {
     const CesiumRef = (viewer as any).__cesium;
     if (!CesiumRef) return;
 
-    const isEntityVisibleFromCamera = (entity: any): boolean => {
+    const isEntityVisibleFromCamera = (entity: any, occluder: any): boolean => {
       try {
         let samplePoint: any = null;
         if (entity.position) {
@@ -372,7 +402,6 @@ function CesiumAppInner() {
           }
         }
         if (!samplePoint) return true;
-        const occluder = new CesiumRef.EllipsoidalOccluder(viewer.scene.globe.ellipsoid, viewer.camera.positionWC);
         return occluder.isPointVisible(samplePoint);
       } catch {
         return true;
@@ -384,12 +413,17 @@ function CesiumAppInner() {
       if (now - cullLastRunAtRef.current < 150) return;
       cullLastRunAtRef.current = now;
 
+      const occluder = new CesiumRef.EllipsoidalOccluder(
+        viewer.scene.globe.ellipsoid,
+        viewer.camera.positionWC
+      );
+
       for (let i = 0; i < viewer.dataSources.length; i++) {
         const ds = viewer.dataSources.get(i);
         const entities = ds.entities.values;
         for (let j = 0; j < entities.length; j++) {
           const entity = entities[j];
-          entity.show = isEntityVisibleFromCamera(entity);
+          entity.show = isEntityVisibleFromCamera(entity, occluder);
         }
       }
 
@@ -398,7 +432,7 @@ function CesiumAppInner() {
         const entity = looseEntities[i];
         const type = entity.id?.split(':')?.[0];
         const layerEnabled = type ? (visibility[type] ?? true) : true;
-        entity.show = layerEnabled && isEntityVisibleFromCamera(entity);
+        entity.show = layerEnabled && isEntityVisibleFromCamera(entity, occluder);
       }
     };
 
@@ -438,6 +472,7 @@ function CesiumAppInner() {
             onZoomOut={onZoomOut}
             onResetView={onResetView}
             onToggleHelp={onToggleHelp}
+            onMyLocation={onMyLocation}
             viewer={viewerRef.current}
           />
           {selectedEntity && (

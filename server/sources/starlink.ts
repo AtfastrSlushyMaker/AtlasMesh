@@ -51,15 +51,17 @@ export function startStarlinkSource(
   opts?: StarlinkPollOptions
 ) {
   const intervalMs = opts?.intervalMs ?? 6 * 60 * 60 * 1000;
+  const retryMs = 5 * 60 * 1000;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
+  let lastSucceeded = true;
 
   async function fetchAndEmit() {
     try {
       const res = await axios.get(STARLINK_URL, {
         timeout: 30000,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent': 'AtlasMesh/2.0 (geospatial viz app; github.com/malek/atlasmesh)',
           'Accept': 'text/plain',
         },
       });
@@ -91,17 +93,19 @@ export function startStarlinkSource(
       }
 
       console.log(`[Starlink] Fetched ${entities.length} satellites`);
+      lastSucceeded = true;
       if (entities.length > 0) {
         onEntities(entities);
       } else {
         emitFallbackStarlink(onEntities);
       }
     } catch (err: any) {
-      console.warn('[Starlink] Error:', err?.message || err, '- using fallback');
+      lastSucceeded = false;
+      console.warn(`[Starlink] Error: ${err?.message || err}. Retrying in ${retryMs / 1000}s.`);
       emitFallbackStarlink(onEntities);
     } finally {
       if (!stopped) {
-        timer = setTimeout(fetchAndEmit, intervalMs);
+        timer = setTimeout(fetchAndEmit, lastSucceeded ? intervalMs : retryMs);
       }
     }
   }

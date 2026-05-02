@@ -16,6 +16,7 @@ export function WildfireLayer({ viewer, visible }: LayerProps) {
           image: Icons.wildfire,
           scale: 0.5 + (intensity * 0.5),
           color: Cesium.Color.fromCssColorString('#dc2626'),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3000000),
         }
       });
     },

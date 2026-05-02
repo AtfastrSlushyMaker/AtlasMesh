@@ -15,6 +15,7 @@ export function VolcanoLayer({ viewer, visible }: LayerProps) {
           image: Icons.volcano,
           scale: 0.7,
           color: Cesium.Color.fromCssColorString('#ff6b35'),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000000),
         },
         label: {
           text: e.metadata?.name || '',

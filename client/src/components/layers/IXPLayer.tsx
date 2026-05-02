@@ -18,6 +18,7 @@ export const IXPLayer = memo(function IXPLayer({ viewer, visible }: LayerProps) 
           image: Icons.ixp,
           scale,
           color: Cesium.Color.fromCssColorString('#818cf8'),
+          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3000000),
         },
         label: {
           text: `${e.metadata?.name || 'IXP'}${e.metadata?.city ? ` · ${e.metadata.city}` : ''}`,
