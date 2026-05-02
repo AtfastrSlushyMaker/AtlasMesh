@@ -466,18 +466,19 @@ export const AppUI = memo(function AppUI({
             className="glass-panel"
             style={{
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               gap: isMobile ? 2 : 4,
-              padding: isMobile ? '4px 6px' : 6,
-              borderRadius: 8,
+              padding: isMobile ? '4px 6px' : 8,
+              borderRadius: 10,
             }}
           >
-            <IconButton onClick={onZoomOut} title="Zoom Out" icon={mdiMinus} size={isMobile ? 28 : 32} />
-            <IconButton onClick={onResetView} title="Reset View (R)" icon={mdiTarget} accent size={isMobile ? 28 : 32} />
-            <IconButton onClick={onZoomIn} title="Zoom In" icon={mdiPlus} size={isMobile ? 28 : 32} />
-            <div style={{ width: 1, height: isMobile ? 16 : 20, background: 'rgba(255,255,255,0.08)', margin: '0 2px' }} />
-            <IconButton onClick={onMyLocation} title="My Location" icon={mdiCrosshairsGps} size={isMobile ? 28 : 32} />
-            <IconButton onClick={onToggleHelp} title="Shortcuts (?)" icon={mdiKeyboardOutline} size={isMobile ? 28 : 32} />
+            <IconButton onClick={onZoomIn} title="Zoom In" icon={mdiPlus} size={isMobile ? 34 : 40} />
+            <IconButton onClick={onResetView} title="Reset View (R)" icon={mdiTarget} accent size={isMobile ? 34 : 40} />
+            <IconButton onClick={onZoomOut} title="Zoom Out" icon={mdiMinus} size={isMobile ? 34 : 40} />
+            <div style={{ width: isMobile ? 16 : 24, height: 1, background: 'rgba(255,255,255,0.08)', margin: '2px 0' }} />
+            <IconButton onClick={onMyLocation} title="My Location" icon={mdiCrosshairsGps} size={isMobile ? 34 : 40} />
+            <IconButton onClick={onToggleHelp} title="Shortcuts (?)" icon={mdiKeyboardOutline} size={isMobile ? 34 : 40} />
             {viewer && <MapStyleSwitcher viewer={viewer} />}
           </div>
         </div>

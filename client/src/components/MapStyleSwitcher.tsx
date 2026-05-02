@@ -35,7 +35,7 @@ function MdiIcon({ path, size = 14, color = 'currentColor' }: { path: string; si
 
 export const MapStyleSwitcher = memo(function MapStyleSwitcher({ viewer }: MapStyleSwitcherProps) {
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState<MapStyle>('dark');
+  const [active, setActive] = useState<MapStyle>('satellite');
 
   if (!viewer) return null;
 
@@ -92,9 +92,9 @@ export const MapStyleSwitcher = memo(function MapStyleSwitcher({ viewer }: MapSt
         onClick={() => setOpen(!open)}
         title="Map Style"
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: 6,
+          width: 40,
+          height: 40,
+          borderRadius: 8,
           border: '1px solid rgba(255,255,255,0.08)',
           background: 'rgba(255,255,255,0.03)',
           color: 'var(--text-secondary)',
@@ -113,7 +113,7 @@ export const MapStyleSwitcher = memo(function MapStyleSwitcher({ viewer }: MapSt
           e.currentTarget.style.color = 'var(--text-secondary)';
         }}
       >
-        <MdiIcon path={mdiEarth} size={16} />
+        <MdiIcon path={MAP_STYLES.find(s => s.id === active)?.iconPath || mdiEarth} size={18} />
       </button>
 
       {open && (
