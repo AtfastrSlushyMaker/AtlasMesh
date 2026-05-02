@@ -1,122 +1,172 @@
-# AtlasMesh
+<p align="center">
+  <picture>
+    <img src="https://raw.githubusercontent.com/AtfastrSlushyMaker/AtlasMesh/main/client/public/logo.svg" width="80" alt="AtlasMesh Logo" />
+  </picture>
+</p>
 
-Real-time geospatial visualization platform aggregating live and historical data on a 3D globe.
+<h1 align="center">AtlasMesh</h1>
 
-**[atlasmesh.onrender.com](https://atlasmesh.onrender.com)**
+<p align="center">
+  <strong>Real-time geospatial visualization of Earth's live data on a 3D globe</strong>
+</p>
 
-## Features
+<p align="center">
+  <a href="https://atlasmesh.onrender.com"><img src="https://img.shields.io/badge/🌐_Live-atlasmesh.onrender.com-00ffaa?style=flat-square" alt="Deployed" /></a>
+  <img src="https://img.shields.io/badge/React-18-38bdf8?style=flat-square&logo=react" alt="React 18" />
+  <img src="https://img.shields.io/badge/CesiumJS-1.10-22d3ee?style=flat-square" alt="CesiumJS" />
+  <img src="https://img.shields.io/badge/Node.js-20-10b981?style=flat-square&logo=node.js" alt="Node.js" />
+  <img src="https://img.shields.io/badge/TypeScript-5-818cf8?style=flat-square&logo=typescript" alt="TypeScript" />
+</p>
 
-- **Real-time 3D globe** with aircraft, ships, satellites, earthquakes, volcanoes, wildfires, weather, launches, submarine cables, fireballs, and more
-- **17 data sources** — OpenSky, AISStream, Celestrak, USGS, NASA FIRMS/EONET/JPL, Open-Meteo, TeleGeography, PeeringDB, WRI, and others
-- **Occlusion culling** for performance with thousands of entities
-- **Custom cluster icons** per layer type (Starlink logo, satellite icon, etc.)
-- **Real-time movement interpolation** for aircraft and ships using velocity/heading
-- **Fuzzy search** across all entities with ⌘K shortcut
-- **GPS geolocation** button to find your position on the globe
-- **WebSocket-based live updates** with connection health monitoring
-- **Dark theme** with glassmorphism UI, OLED-optimized
+---
 
-## Tech Stack
+## ✨ What is AtlasMesh?
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, TypeScript, Vite |
-| 3D Engine | CesiumJS |
-| Styling | Tailwind CSS v4, CSS custom properties |
-| Backend | Node.js, Express, TypeScript |
-| Realtime | WebSocket (ws) with ping/pong |
-| Shared | TypeScript entity types (npm workspaces) |
+AtlasMesh aggregates **18 real-time & historical data sources** — aircraft, ships, satellites, Starlink, ISS, earthquakes, volcanoes, wildfires, weather, launches, submarine cables, fireballs, airports, power plants, meteorites, wind farms, internet exchanges, and global events — and renders them all simultaneously on a CesiumJS 3D globe.
 
-## Getting Started
+---
+
+## 🗺️ Data Layers
+
+| 🛩️ Transport | 🌍 Natural | 🛰️ Space | ⚡ Energy | 🌐 Infrastructure |
+|:---|:---|:---|:---|:---|
+| Aircraft | Earthquakes | Satellites | Power Plants | Subsea Cables |
+| Ships | Volcanoes | Starlink | Wind Farms | Internet Exchanges |
+| | Wildfires | ISS | | Airports |
+| | Global Events | Launches | | |
+| | Meteorites | Fireballs | | |
+| | Weather | | | |
+
+> **Real sources only.** No mock, procedural, or fake data. Every layer pulls from a live API.
+
+---
+
+## 🎥 Features
+
+- **3D Globe** — CesiumJS with dark CartoDB basemap, lighting, atmosphere
+- **All-at-once** — Every entity from every source rendered simultaneously
+- **Real-time movement** — Aircraft & ships interpolate between position updates using velocity/heading
+- **Smooth satellites** — Batched SGP4 propagation avoids main-thread blocking
+- **Occlusion culling** — Entities on the far side of Earth are hidden (150ms throttle)
+- **Clustering** — Custom icons per layer type when entities group together
+- **Fuzzy search** — `⌘K` Levenshtein-powered search across all 15k+ entities
+- **GPS geolocation** — Fly the camera to your device's location
+- **Entity details** — Click any entity for full metadata, position, and raw JSON
+- **WebSocket live updates** — O(n) diffing, only changed entities sent to clients
+- **Keyboard shortcuts** — Full shortcut system (`?` to view)
+- **Responsive** — Glassmorphism dark theme, mobile & tablet friendly
+
+---
+
+## 🚀 Quick Start
 
 ```bash
-# Install all workspaces
+git clone https://github.com/AtfastrSlushyMaker/AtlasMesh.git
+cd AtlasMesh
 npm install
+```
 
-# Start backend (port 3000)
+### Development
+
+```bash
+# Terminal 1: Backend (port 3000)
 npm run start:server
 
-# Start frontend (port 5173)
+# Terminal 2: Frontend (port 5173)
 npm run start:client
 ```
 
-### Environment Variables
+### Environment
 
-```bash
-OPENSKY_USERNAME=your_username
+```env
+OPENSKY_USERNAME=your_username    # Optional — enables live aircraft
 OPENSKY_PASSWORD=your_password
-AISSTREAM_TOKEN=your_aisstream_token
+AISSTREAM_TOKEN=your_token        # Optional — enables live ships
 ```
 
-## Deployment
+### Production
 
 ```bash
-# Build both server and client
-npm run build
-
-# Start production server (serves client from dist/)
-npm start
+npm run build   # Compiles TypeScript + Vite
+npm start       # Serves client + WebSocket on port 3000
 ```
 
-See `render.yaml` for Render deployment config.
+---
 
-## Project Structure
+## 📡 Data Sources
+
+| Source | Type | Refresh |
+|--------|------|---------|
+| [OpenSky Network](https://opensky-network.org) | Aircraft positions | 15s |
+| [AISStream](https://aisstream.io) | Ship positions (AIS) | Streaming |
+| [Celestrak](https://celestrak.org) | Satellite & Starlink TLEs | 2–6h |
+| [OpenFlights](https://openflights.org/data.php) | Airport database | 24h |
+| [Space Devs](https://ll.thespacedevs.com) | Upcoming launches | 15m |
+| [NASA EONET](https://eonet.gsfc.nasa.gov) | Global natural events | 5m |
+| [USGS Earthquakes](https://earthquake.usgs.gov) | Seismic activity | 60s |
+| [USGS Volcanoes](https://volcanoes.usgs.gov) | Active volcanoes | 6h |
+| [Open-Meteo](https://open-meteo.com) | Weather stations | 30m |
+| [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov) | Active wildfires | 1h |
+| [NASA JPL CNEOS](https://ssd-api.jpl.nasa.gov) | Fireball events | 1h |
+| [TeleGeography](https://www.submarinecablemap.com) | Submarine cables | 24h |
+| [WRI](https://www.wri.org) | Global power plants | 24h |
+| [NASA Data](https://data.nasa.gov) | Meteorite landings | 24h |
+| [Open Renewables](https://github.com/niclasj/global-renewable-power-plants) | Wind farms | 24h |
+| [PeeringDB](https://www.peeringdb.com) | Internet exchanges | 24h |
+| [wheretheiss.at](https://wheretheiss.at) | ISS position | 5s |
+
+---
+
+## 🏗️ Architecture
 
 ```
-AtlasMesh/
-├── client/          # React + CesiumJS + Vite
-│   └── src/
-│       ├── components/layers/   # Cesium entity layers
-│       ├── hooks/               # WebSocket, search, keyboard
-│       ├── ui/                  # AppUI, EntityInfoPanel, Logo, Toast
-│       ├── cesium/              # Cesium viewer init + culling
-│       └── styles/              # Design system CSS
-├── server/          # Express + WebSocket
-│   ├── src/index.ts             # Server entry with graceful shutdown
-│   ├── services/store.ts        # Entity store with O(n) diffing
-│   └── sources/                 # Data source adapters
-├── shared/          # Shared TypeScript types
-└── render.yaml      # Render deployment config
+ AtlasMesh/
+ ├── client/                 # React 18 + CesiumJS + Vite
+ │   └── src/
+ │       ├── cesium/          # Viewer init, occlusion culling
+ │       ├── components/
+ │       │   └── layers/      # 18 entity layer components
+ │       ├── hooks/           # WebSocket, fuzzy search, keyboard
+ │       ├── ui/              # AppUI, EntityInfoPanel, Logo, Toast
+ │       └── styles/          # Design system (CSS custom properties)
+ ├── server/                  # Express + WebSocket
+ │   ├── src/index.ts         # Graceful shutdown, metrics, health
+ │   ├── services/store.ts    # O(n) entity diffing
+ │   └── sources/             # 18 data source adapters
+ ├── shared/                  # TypeScript entity types
+ └── render.yaml              # Render deploy config
 ```
 
-## Data Sources
+---
 
-| Source | Type | API |
-|--------|------|-----|
-| OpenSky Network | Aircraft | REST |
-| AISStream | Ships | WebSocket |
-| Celestrak | Satellites, Starlink | TLE |
-| Space Devs | Launches | REST |
-| NASA EONET | Global Events | REST |
-| USGS | Earthquakes, Volcanoes | REST |
-| Open-Meteo | Weather | REST |
-| NASA FIRMS | Wildfires | REST |
-| TeleGeography | Submarine Cables | REST |
-| NASA JPL CNEOS | Fireballs | REST |
-| WRI | Power Plants | REST |
-| NASA | Meteorites | REST |
-| Open Renewables | Wind Farms | REST |
-| PeeringDB | Internet Exchanges | REST |
-| wheretheiss.at | ISS | REST |
+## ⌨️ Shortcuts
 
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `?` | Show/hide shortcuts |
-| `⌘K` | Focus search |
+| Key | Action |
+|-----|--------|
+| `?` | Help overlay |
+| `⌘K` / `Ctrl+K` | Focus search |
 | `R` | Reset camera |
 | `=` / `-` | Zoom in / out |
-| `Esc` | Close entity panel |
+| `Esc` | Close panel |
 | `Ctrl+1` | Toggle Aircraft |
 | `Ctrl+2` | Toggle Ships |
 | `Ctrl+3` | Toggle Satellites |
 
-## API
+---
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Health check |
-| `GET /metrics` | Uptime, memory, connections |
-| `GET /api/entities` | All entities |
-| `WS /` | Live entity diffs |
+## 🔌 API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Status, entity count, uptime, memory |
+| `GET` | `/metrics` | Connections, messages, CPU |
+| `GET` | `/api/entities` | All current entities |
+| `GET` | `/api/entities/:id` | Single entity by ID |
+| `GET` | `/api/entities/type/:type` | Filter by type |
+| `WS` | `/` | Live entity diffs (add/update/remove) |
+
+---
+
+<p align="center">
+  <sub>Built with 🌍 by <a href="https://github.com/AtfastrSlushyMaker">AtfastrSlushyMaker</a></sub>
+</p>
