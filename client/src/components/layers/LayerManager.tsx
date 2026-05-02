@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { AircraftLayer } from './AircraftLayer';
 import { ShipLayer } from './ShipLayer';
 import { SatelliteLayer } from './SatelliteLayer';
@@ -9,13 +9,20 @@ import { LaunchLayer } from './LaunchLayer';
 import { WildfireLayer } from './WildfireLayer';
 import { VolcanoLayer } from './VolcanoLayer';
 import { CableLayer } from './CableLayer';
+import { LightningLayer } from './LightningLayer';
+import { PowerPlantLayer } from './PowerPlantLayer';
+import { MeteoriteLayer } from './MeteoriteLayer';
+import { WindFarmLayer } from './WindFarmLayer';
+import { IXPLayer } from './IXPLayer';
+import { StarlinkLayer } from './StarlinkLayer';
+import { ISSLayer } from './ISSLayer';
 
 interface LayerManagerProps {
   viewer: any;
   visibility: Record<string, boolean>;
 }
 
-export function LayerManager({ viewer, visibility }: LayerManagerProps) {
+export const LayerManager = memo(function LayerManager({ viewer, visibility }: LayerManagerProps) {
   if (!viewer) return null;
 
   return (
@@ -30,6 +37,13 @@ export function LayerManager({ viewer, visibility }: LayerManagerProps) {
       <WildfireLayer viewer={viewer} visible={visibility.wildfire ?? true} />
       <VolcanoLayer viewer={viewer} visible={visibility.volcano ?? true} />
       <CableLayer viewer={viewer} visible={visibility.cable ?? true} />
+      <LightningLayer viewer={viewer} visible={visibility.lightning ?? true} />
+      <PowerPlantLayer viewer={viewer} visible={visibility.powerplant ?? true} />
+      <MeteoriteLayer viewer={viewer} visible={visibility.meteorite ?? true} />
+      <WindFarmLayer viewer={viewer} visible={visibility.windfarm ?? true} />
+      <IXPLayer viewer={viewer} visible={visibility.ixp ?? true} />
+      <StarlinkLayer viewer={viewer} visible={visibility.starlink ?? true} />
+      <ISSLayer viewer={viewer} visible={visibility.iss ?? true} />
     </>
   );
-}
+});

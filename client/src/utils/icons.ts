@@ -9,6 +9,12 @@ import {
   mdiWeatherCloudy,
   mdiRocketLaunch,
   mdiVolcano,
+  mdiCableData,
+  mdiFactory,
+  mdiWindTurbine,
+  mdiRouterNetwork,
+  mdiStarFourPoints,
+  mdiSpaceStation,
 } from '@mdi/js';
 
 const TRANSPARENT_PIXEL =
@@ -71,4 +77,11 @@ export const Icons = {
   weather: createIcon(mdiWeatherCloudy, '#3b82f6'),
   launch: createIcon(mdiRocketLaunch, '#10b981'),
   volcano: createIcon(mdiVolcano, '#ff6b35'),
+  cable: createIcon(mdiCableData, '#00ffaa'),
+  powerplant: createIcon(mdiFactory, '#fbbf24'),
+  meteorite: createIcon(mdiMeteor, '#fb923c'),
+  windfarm: createIcon(mdiWindTurbine, '#34d399'),
+  ixp: createIcon(mdiRouterNetwork, '#818cf8'),
+  starlink: createIcon(mdiStarFourPoints, '#c084fc'),
+  iss: createIcon(mdiSpaceStation, '#22d3ee'),
 };

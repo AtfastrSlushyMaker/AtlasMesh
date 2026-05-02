@@ -20,12 +20,18 @@ class EntityStore {
         this.map.set(id, ent);
         added.push(ent);
       } else {
-        // Simple change detection: newer timestamp or position/metadata change
-        if (
-          ent.timestamp > existing.timestamp ||
-          JSON.stringify(ent.position) !== JSON.stringify(existing.position) ||
-          JSON.stringify(ent.metadata) !== JSON.stringify(existing.metadata)
-        ) {
+        // Fast change detection: newer timestamp or position/metadata change
+        const posChanged =
+          ent.position.lat !== existing.position.lat ||
+          ent.position.lon !== existing.position.lon ||
+          ent.position.alt !== existing.position.alt;
+        const metaChanged = Object.keys(ent.metadata || {}).some(
+          (k) => ent.metadata[k] !== existing.metadata[k]
+        ) || Object.keys(existing.metadata || {}).some(
+          (k) => !(k in (ent.metadata || {}))
+        );
+
+        if (ent.timestamp > existing.timestamp || posChanged || metaChanged) {
           this.map.set(id, ent);
           updated.push(ent);
         }
@@ -40,7 +46,7 @@ class EntityStore {
         // If it's NOT in incomingMap, we check if it's too old
         if (!incomingMap.has(id)) {
           // Age out entities older than 1 hour (except static ones like volcanoes/cables)
-          const isStatic = ['volcano', 'cable'].includes(type);
+          const isStatic = ['volcano', 'cable', 'powerplant', 'meteorite', 'windfarm', 'ixp'].includes(type);
           if (!isStatic && (now - existing.timestamp > 60 * 60 * 1000)) {
             this.map.delete(id);
             removed.push(id);

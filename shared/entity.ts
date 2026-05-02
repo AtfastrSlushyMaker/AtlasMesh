@@ -10,7 +10,14 @@ export type EntityType =
   | 'lightning'
   | 'wildfire'
   | 'cable'
-  | 'volcano';
+  | 'volcano'
+  | 'fireball'
+  | 'powerplant'
+  | 'meteorite'
+  | 'windfarm'
+  | 'ixp'
+  | 'starlink'
+  | 'iss';
 
 export interface Entity {
   id: string;

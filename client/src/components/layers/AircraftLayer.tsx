@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { useEntityLayer, LayerProps } from './useEntityLayer';
 import { Icons } from '../../utils/icons';
 
-export function AircraftLayer({ viewer, visible }: LayerProps) {
+export const AircraftLayer = memo(function AircraftLayer({ viewer, visible }: LayerProps) {
   const Cesium = (viewer as any).__cesium;
 
   useEntityLayer({
@@ -36,4 +37,4 @@ export function AircraftLayer({ viewer, visible }: LayerProps) {
   });
 
   return null;
-}
+});

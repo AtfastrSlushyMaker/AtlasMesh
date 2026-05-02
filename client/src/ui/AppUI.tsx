@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect, memo } from 'react';
 import {
   mdiAirplane,
   mdiBroadcast,
   mdiCableData,
   mdiCrosshairsGps,
+  mdiFactory,
   mdiFerry,
   mdiFire,
   mdiGlobeLight,
@@ -11,16 +12,72 @@ import {
   mdiMagnify,
   mdiMenu,
   mdiMenuOpen,
+  mdiMeteor,
   mdiMinus,
   mdiPlus,
   mdiRadar,
   mdiRocketLaunch,
+  mdiRouterNetwork,
   mdiSatelliteVariant,
+  mdiSpaceStation,
+  mdiStarFourPoints,
   mdiTarget,
   mdiTsunami,
   mdiVolcano,
   mdiWeatherCloudy,
+  mdiWindTurbine,
+  mdiKeyboardOutline,
 } from '@mdi/js';
+import { useFuzzySearch } from '../hooks/useFuzzySearch';
+import { useToast } from './Toast';
+import { MapStyleSwitcher } from '../components/MapStyleSwitcher';
+
+export interface LayerDef {
+  id: string;
+  label: string;
+  color: string;
+  iconPath: string;
+  category: 'transport' | 'natural' | 'space' | 'infrastructure' | 'weather' | 'energy';
+}
+
+export const LAYERS: LayerDef[] = [
+  { id: 'aircraft', label: 'Aircraft', color: '#38bdf8', iconPath: mdiAirplane, category: 'transport' },
+  { id: 'ship', label: 'Ships (AIS)', color: '#facc15', iconPath: mdiFerry, category: 'transport' },
+  { id: 'satellite', label: 'Satellites', color: '#a78bfa', iconPath: mdiSatelliteVariant, category: 'space' },
+  { id: 'launch', label: 'Space Launches', color: '#10b981', iconPath: mdiRocketLaunch, category: 'space' },
+  { id: 'earthquake', label: 'Earthquakes', color: '#ef4444', iconPath: mdiTsunami, category: 'natural' },
+  { id: 'event', label: 'Global Events', color: '#f97316', iconPath: mdiBroadcast, category: 'natural' },
+  { id: 'wildfire', label: 'Wildfires', color: '#dc2626', iconPath: mdiFire, category: 'natural' },
+  { id: 'lightning', label: 'Lightning', color: '#fef08a', iconPath: mdiLightningBolt, category: 'weather' },
+  { id: 'weather', label: 'Weather', color: '#3b82f6', iconPath: mdiWeatherCloudy, category: 'weather' },
+  { id: 'cable', label: 'Subsea Cables', color: '#00ffaa', iconPath: mdiCableData, category: 'infrastructure' },
+  { id: 'volcano', label: 'Volcanoes', color: '#ff6b35', iconPath: mdiVolcano, category: 'natural' },
+  { id: 'fireball', label: 'Fireballs', color: '#f472b6', iconPath: mdiCrosshairsGps, category: 'space' },
+  { id: 'starlink', label: 'Starlink', color: '#c084fc', iconPath: mdiStarFourPoints, category: 'space' },
+  { id: 'iss', label: 'ISS', color: '#22d3ee', iconPath: mdiSpaceStation, category: 'space' },
+  { id: 'powerplant', label: 'Power Plants', color: '#fbbf24', iconPath: mdiFactory, category: 'energy' },
+  { id: 'windfarm', label: 'Wind Farms', color: '#34d399', iconPath: mdiWindTurbine, category: 'energy' },
+  { id: 'meteorite', label: 'Meteorites', color: '#fb923c', iconPath: mdiMeteor, category: 'natural' },
+  { id: 'ixp', label: 'Internet Exchanges', color: '#818cf8', iconPath: mdiRouterNetwork, category: 'infrastructure' },
+];
+
+const CATEGORY_ORDER: Record<string, number> = {
+  transport: 0,
+  space: 1,
+  natural: 2,
+  weather: 3,
+  energy: 4,
+  infrastructure: 5,
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  transport: 'Transport',
+  space: 'Space',
+  natural: 'Natural Hazards',
+  weather: 'Weather',
+  energy: 'Energy',
+  infrastructure: 'Infrastructure',
+};
 
 interface AppUIProps {
   connected: boolean;
@@ -39,9 +96,19 @@ interface AppUIProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetView: () => void;
+  onToggleHelp: () => void;
+  viewer?: any;
 }
 
-export function AppUI({
+function MdiIcon({ path, size = 16, color = 'currentColor' }: { path: string; size?: number; color?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} style={{ display: 'block', color, flexShrink: 0 }}>
+      <path d={path} fill="currentColor" />
+    </svg>
+  );
+}
+
+export const AppUI = memo(function AppUI({
   connected,
   visibility,
   setVisibility,
@@ -51,295 +118,617 @@ export function AppUI({
   onZoomIn,
   onZoomOut,
   onResetView,
+  onToggleHelp,
+  viewer,
 }: AppUIProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [search, setSearch] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
-  const MdiIcon = ({ path, size = 16, color = 'currentColor' }: { path: string; size?: number; color?: string }) => (
-    <svg viewBox="0 0 24 24" width={size} height={size} style={{ display: 'block', color }}>
-      <path d={path} fill="currentColor" />
-    </svg>
-  );
+  const searchResults = useFuzzySearch(searchItems, search, 12);
 
   const toggleLayer = (layer: string) => {
-    setVisibility(prev => ({ ...prev, [layer]: !(prev[layer] ?? true) }));
+    setVisibility(prev => {
+      const next = { ...prev, [layer]: !(prev[layer] ?? true) };
+      const isVisible = next[layer];
+      toast.addToast(
+        `${LAYERS.find(l => l.id === layer)?.label} ${isVisible ? 'shown' : 'hidden'}`,
+        'info',
+        2000
+      );
+      return next;
+    });
   };
 
-  const layers = [
-    { id: 'aircraft', label: 'Aircraft', color: '#38bdf8', iconPath: mdiAirplane },
-    { id: 'ship', label: 'Ships (AIS)', color: '#facc15', iconPath: mdiFerry },
-    { id: 'satellite', label: 'Satellites', color: '#a78bfa', iconPath: mdiSatelliteVariant },
-    { id: 'launch', label: 'Space Launches', color: '#10b981', iconPath: mdiRocketLaunch },
-    { id: 'earthquake', label: 'Earthquakes', color: '#ef4444', iconPath: mdiTsunami },
-    { id: 'event', label: 'Global Events', color: '#f97316', iconPath: mdiBroadcast },
-    { id: 'wildfire', label: 'Wildfires', color: '#dc2626', iconPath: mdiFire },
-    { id: 'lightning', label: 'Lightning', color: '#fef08a', iconPath: mdiLightningBolt },
-    { id: 'weather', label: 'Weather Stations', color: '#3b82f6', iconPath: mdiWeatherCloudy },
-    { id: 'cable', label: 'Subsea Cables', color: '#00ffaa', iconPath: mdiCableData },
-    { id: 'volcano', label: 'Volcanoes', color: '#ff6b35', iconPath: mdiVolcano },
-  ];
+  const toggleAllInCategory = (category: string) => {
+    const ids = LAYERS.filter(l => l.category === category).map(l => l.id);
+    const allVisible = ids.every(id => visibility[id] ?? true);
+    setVisibility(prev => {
+      const next = { ...prev };
+      ids.forEach(id => (next[id] = !allVisible));
+      return next;
+    });
+    toast.addToast(
+      `${CATEGORY_LABELS[category]} ${allVisible ? 'hidden' : 'shown'}`,
+      'info',
+      2000
+    );
+  };
 
-  const searchResults = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return [];
+  // Keyboard shortcut for search focus
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
-    return searchItems
-      .filter((item) => {
-        return (
-          item.name.toLowerCase().includes(q) ||
-          item.id.toLowerCase().includes(q) ||
-          item.type.toLowerCase().includes(q)
-        );
-      })
-      .slice(0, 10);
-  }, [search, searchItems]);
+  // Group layers by category
+  const groupedLayers = useMemo(() => {
+    const groups: Record<string, LayerDef[]> = {};
+    for (const l of LAYERS) {
+      if (!groups[l.category]) groups[l.category] = [];
+      groups[l.category].push(l);
+    }
+    return Object.entries(groups).sort((a, b) => CATEGORY_ORDER[a[0]] - CATEGORY_ORDER[b[0]]);
+  }, []);
 
   const totalEntities = Object.values(stats).reduce((a, b) => a + b, 0);
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
   return (
-    <div className="absolute inset-0 pointer-events-none flex overflow-hidden" style={{ fontFamily: "'Inter', sans-serif" }}>
-      
-      {/* Top HUD */}
-      <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start z-10">
-        <div className="flex flex-col gap-1 pointer-events-auto">
-          <div className="flex items-center gap-3 px-4 py-2 transition-colors group" 
-               style={{ backgroundColor: '#000', border: '1px solid #262626' }}>
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        fontFamily: "'Inter', sans-serif",
+      }}
+    >
+      {/* ===== TOP HUD ===== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          padding: isMobile ? '12px' : '20px 24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          zIndex: 30,
+          gap: 12,
+        }}
+      >
+        {/* Left: Title Card */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'auto' }}>
+          <div
+            className="glass-panel"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '10px 16px',
+              borderRadius: 8,
+            }}
+          >
             <MdiIcon path={mdiGlobeLight} size={18} color="#ffffff" />
-            <h1 className="font-semibold text-white tracking-widest uppercase text-sm">AtlasMesh</h1>
-            <div style={{ width: 1, height: 16, backgroundColor: '#262626', margin: '0 8px' }}></div>
-            <div className="flex items-center gap-2">
-              <div style={{ 
-                width: 8, height: 8, 
-                backgroundColor: connected ? '#10b981' : '#ef4444',
-                animation: connected ? 'pulse 2s infinite' : 'none'
-              }} />
-              <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.15em', color: '#a3a3a3', textTransform: 'uppercase' }}>
-                {connected ? 'Sync Active' : 'Offline'}
+            <h1
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#fff',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                margin: 0,
+              }}
+            >
+              AtlasMesh
+            </h1>
+            <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.10)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  backgroundColor: connected ? 'var(--accent-success)' : 'var(--accent-danger)',
+                  boxShadow: connected ? '0 0 8px var(--accent-success)' : 'none',
+                  transition: 'all 300ms',
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 10,
+                  fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.12em',
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {connected ? 'Live' : 'Offline'}
               </span>
             </div>
           </div>
+        </div>
 
+        {/* Center: Floating Search */}
+        <div
+          style={{
+            position: 'absolute',
+            top: isMobile ? 12 : 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: isMobile ? 'calc(100% - 24px)' : 420,
+            maxWidth: '60vw',
+            pointerEvents: 'auto',
+            zIndex: 35,
+          }}
+        >
           <div
+            className="glass-panel"
             style={{
-              position: 'relative',
-              marginTop: 10,
-              width: 340,
-              pointerEvents: 'auto',
-              transform: searchOpen ? 'translateY(0)' : 'translateY(2px)',
-              transition: 'all 220ms cubic-bezier(0.16,1,0.3,1)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '10px 14px',
+              borderRadius: 10,
+              borderColor: searchFocused ? 'rgba(56,189,248,0.35)' : undefined,
+              boxShadow: searchFocused
+                ? '0 0 0 1px rgba(56,189,248,0.20), 0 12px 40px rgba(0,0,0,0.50)'
+                : '0 8px 32px rgba(0,0,0,0.35)',
+              transition: 'all var(--transition-base)',
             }}
           >
-            <div
+            <MdiIcon path={mdiMagnify} size={16} color="var(--text-muted)" />
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+              placeholder="Search aircraft, ships, earthquakes..."
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 12px',
-                background: 'linear-gradient(180deg, rgba(8,10,14,0.95), rgba(4,6,10,0.95))',
-                border: '1px solid #1f2937',
-                boxShadow: searchOpen ? '0 8px 28px rgba(0,0,0,0.45)' : '0 2px 10px rgba(0,0,0,0.35)',
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: 'var(--text-primary)',
+                fontSize: 13,
+                letterSpacing: '0.01em',
+                fontFamily: 'var(--font-sans)',
               }}
-            >
-              <MdiIcon path={mdiMagnify} size={18} color="#93c5fd" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onFocus={() => setSearchOpen(true)}
-                onBlur={() => setTimeout(() => setSearchOpen(false), 120)}
-                placeholder="Search aircraft, events, IDs..."
+            />
+            {!isMobile && (
+              <kbd
                 style={{
-                  flex: 1,
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  color: '#e5e7eb',
-                  fontSize: 13,
-                  letterSpacing: '0.02em',
-                }}
-              />
-            </div>
-
-            {searchOpen && searchResults.length > 0 && (
-              <div
-                style={{
-                  marginTop: 6,
-                  backgroundColor: 'rgba(5,8,12,0.96)',
-                  border: '1px solid #1f2937',
-                  maxHeight: 280,
-                  overflowY: 'auto',
-                  animation: 'fadeSlideIn 220ms ease',
+                  padding: '2px 6px',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 4,
+                  fontSize: 10,
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)',
                 }}
               >
-                {searchResults.map((item) => (
+                ⌘K
+              </kbd>
+            )}
+          </div>
+
+          {/* Search Results Dropdown */}
+          {searchFocused && search.trim() && (
+            <div
+              className="glass-panel"
+              style={{
+                marginTop: 8,
+                maxHeight: 320,
+                overflowY: 'auto',
+                borderRadius: 10,
+                zIndex: 40,
+                animation: 'fadeSlideIn 200ms ease',
+                boxShadow: '0 16px 48px rgba(0,0,0,0.50)',
+              }}
+            >
+              {searchResults.length > 0 ? (
+                searchResults.map((item) => (
                   <button
                     key={item.id}
                     onMouseDown={() => {
                       onFocusEntity(item);
-                      setSearch(item.name);
+                      setSearch('');
+                      setSearchFocused(false);
                     }}
                     style={{
                       width: '100%',
                       textAlign: 'left',
-                      padding: '10px 12px',
+                      padding: '10px 14px',
                       border: 'none',
-                      borderBottom: '1px solid rgba(31,41,55,0.5)',
+                      borderBottom: '1px solid rgba(255,255,255,0.04)',
                       background: 'transparent',
-                      color: '#e5e7eb',
+                      color: 'var(--text-primary)',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
+                      transition: 'background var(--transition-fast)',
                     }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
-                    <span style={{ fontSize: 12, fontWeight: 500, maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 500,
+                        maxWidth: '70%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {item.name}
                     </span>
-                    <span style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: 'var(--text-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.08em',
+                        fontFamily: 'var(--font-mono)',
+                        flexShrink: 0,
+                        paddingLeft: 8,
+                      }}
+                    >
                       {item.type}
                     </span>
                   </button>
-                ))}
-              </div>
-            )}
-          </div>
+                ))
+              ) : (
+                <div
+                  style={{
+                    padding: '16px 14px',
+                    textAlign: 'center',
+                    fontSize: 12,
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  No results for &quot;{search}&quot;
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="flex gap-4 pointer-events-auto">
-          <div className="flex flex-col items-end px-5 py-2" 
-               style={{ backgroundColor: '#000', border: '1px solid #262626' }}>
-            <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#525252', marginBottom: 4 }}>Global Entities</span>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 20, color: '#fff', fontWeight: 500, lineHeight: 1 }}>
+        {/* Right: Stats + Controls */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, pointerEvents: 'auto' }}>
+          {/* Entity Count Card */}
+          <div
+            className="glass-panel"
+            style={{
+              padding: '12px 18px',
+              borderRadius: 8,
+              textAlign: 'right',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 9,
+                textTransform: 'uppercase',
+                letterSpacing: '0.18em',
+                color: 'var(--text-muted)',
+                marginBottom: 4,
+              }}
+            >
+              Global Entities
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 22,
+                color: '#fff',
+                fontWeight: 500,
+                lineHeight: 1,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
               {totalEntities.toLocaleString()}
-            </span>
+            </div>
           </div>
 
-          <div style={{ backgroundColor: '#000', border: '1px solid #262626', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button onClick={onZoomOut} title="Zoom Out" style={{ width: 28, height: 28, border: '1px solid #1f2937', background: '#05070b', color: '#d1d5db', cursor: 'pointer' }}>
-              <MdiIcon path={mdiMinus} size={16} color="#d1d5db" />
-            </button>
-            <button onClick={onResetView} title="Reset View" style={{ width: 28, height: 28, border: '1px solid #1f2937', background: '#05070b', color: '#93c5fd', cursor: 'pointer' }}>
-              <MdiIcon path={mdiTarget} size={16} color="#93c5fd" />
-            </button>
-            <button onClick={onZoomIn} title="Zoom In" style={{ width: 28, height: 28, border: '1px solid #1f2937', background: '#05070b', color: '#d1d5db', cursor: 'pointer' }}>
-              <MdiIcon path={mdiPlus} size={16} color="#d1d5db" />
-            </button>
+          {/* Zoom Controls */}
+          <div
+            className="glass-panel"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: 6,
+              borderRadius: 8,
+            }}
+          >
+            <IconButton onClick={onZoomOut} title="Zoom Out" icon={mdiMinus} />
+            <IconButton onClick={onResetView} title="Reset View (R)" icon={mdiTarget} accent />
+            <IconButton onClick={onZoomIn} title="Zoom In" icon={mdiPlus} />
+            <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.08)', margin: '0 4px' }} />
+            <IconButton onClick={onToggleHelp} title="Shortcuts (?)" icon={mdiKeyboardOutline} />
+            {viewer && <MapStyleSwitcher viewer={viewer} />}
           </div>
         </div>
       </div>
 
-      {/* Control Panel (Sidebar) */}
-      <div style={{
-        position: 'absolute',
-        bottom: 24, left: 24, top: 96,
-        width: 280,
-        backgroundColor: 'rgba(0,0,0,0.95)',
-        backdropFilter: 'blur(4px)',
-        border: '1px solid #262626',
-        display: 'flex',
-        flexDirection: 'column',
-        pointerEvents: 'auto',
-        transition: 'transform 0.5s cubic-bezier(0.16,1,0.3,1)',
-        transform: sidebarOpen ? 'translateX(0)' : 'translateX(-120%)',
-      }}>
-        <div style={{ padding: 20, borderBottom: '1px solid #262626', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a3a3a3', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <MdiIcon path={mdiRadar} size={16} color="#a3a3a3" /> Data Feeds
-          </h2>
+      {/* ===== SIDEBAR ===== */}
+      <div
+        className="glass-panel"
+        style={{
+          position: 'absolute',
+          bottom: 24,
+          left: isMobile ? 12 : 24,
+          top: isMobile ? 140 : 96,
+          width: isMobile ? 'calc(100vw - 24px)' : 300,
+          borderRadius: 12,
+          display: 'flex',
+          flexDirection: 'column',
+          pointerEvents: 'auto',
+          transition: 'transform var(--transition-slow), opacity var(--transition-base)',
+          transform: sidebarOpen ? 'translateX(0)' : 'translateX(calc(-100% - 40px))',
+          opacity: sidebarOpen ? 1 : 0,
+          zIndex: 20,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Sidebar Header */}
+        <div
+          style={{
+            padding: '16px 18px',
+            borderBottom: '1px solid var(--border-subtle)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <MdiIcon path={mdiRadar} size={16} color="var(--text-muted)" />
+            <span
+              style={{
+                fontSize: 11,
+                textTransform: 'uppercase',
+                letterSpacing: '0.14em',
+                color: 'var(--text-muted)',
+                fontWeight: 500,
+              }}
+            >
+              Data Feeds
+            </span>
+          </div>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            {LAYERS.filter(l => visibility[l.id] ?? true).length}/{LAYERS.length}
+          </span>
         </div>
-        
-        <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
-          {layers.map(l => {
-            const isVisible = visibility[l.id] ?? true;
-            const count = stats[l.id] || 0;
-            return (
-              <button 
-                key={l.id}
-                onClick={() => toggleLayer(l.id)}
+
+        {/* Layer List by Category */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
+          {groupedLayers.map(([category, layers]) => (
+            <div key={category} style={{ marginBottom: 8 }}>
+              {/* Category Header */}
+              <button
+                onClick={() => toggleAllInCategory(category)}
                 style={{
                   width: '100%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  padding: '10px 12px',
-                  border: '1px solid transparent',
-                  backgroundColor: 'transparent',
+                  padding: '8px 10px',
+                  background: 'transparent',
+                  border: 'none',
                   cursor: 'pointer',
-                  transition: 'background-color 0.15s',
+                  color: 'var(--text-muted)',
+                  fontSize: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.12em',
+                  fontWeight: 600,
+                  transition: 'color var(--transition-fast)',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#0a0a0a')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <span style={{ color: isVisible ? l.color : '#4b5563', display: 'flex', alignItems: 'center', transition: 'color 0.2s' }}>
-                    <MdiIcon path={l.iconPath} size={16} color={isVisible ? l.color : '#4b5563'} />
-                  </span>
-                  <div style={{
-                    width: 14, height: 14,
-                    border: `1.5px solid ${isVisible ? '#fff' : '#525252'}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'border-color 0.2s',
-                  }}>
-                    {isVisible && <div style={{ width: 6, height: 6, backgroundColor: l.color }} />}
-                  </div>
-                  <span style={{
-                    fontSize: 13,
-                    letterSpacing: '0.04em',
-                    color: isVisible ? '#fff' : '#525252',
-                    fontWeight: isVisible ? 500 : 400,
-                    transition: 'color 0.2s',
-                  }}>
-                    {l.label}
-                  </span>
-                </div>
-                <span style={{
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 11,
-                  color: isVisible ? '#a3a3a3' : 'rgba(82,82,82,0.5)',
-                  transition: 'color 0.2s',
-                }}>
-                  {count.toLocaleString()}
+                <span>{CATEGORY_LABELS[category]}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400 }}>
+                  {layers.filter(l => visibility[l.id] ?? true).length}/{layers.length}
                 </span>
               </button>
-            );
-          })}
+
+              {layers.map(l => {
+                const isVisible = visibility[l.id] ?? true;
+                const count = stats[l.id] || 0;
+                return (
+                  <button
+                    key={l.id}
+                    onClick={() => toggleLayer(l.id)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '9px 12px',
+                      margin: '2px 0',
+                      borderRadius: 6,
+                      backgroundColor: isVisible ? 'rgba(255,255,255,0.03)' : 'transparent',
+                      border: '1px solid transparent',
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-fast)',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)';
+                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = isVisible ? 'rgba(255,255,255,0.03)' : 'transparent';
+                      e.currentTarget.style.borderColor = 'transparent';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <MdiIcon path={l.iconPath} size={15} color={isVisible ? l.color : 'var(--text-disabled)'} />
+                      <div
+                        style={{
+                          width: 14,
+                          height: 14,
+                          borderRadius: 3,
+                          border: `1.5px solid ${isVisible ? l.color : 'var(--text-disabled)'}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all var(--transition-fast)',
+                        }}
+                      >
+                        {isVisible && (
+                          <div
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: 1,
+                              backgroundColor: l.color,
+                            }}
+                          />
+                        )}
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 12.5,
+                          letterSpacing: '0.02em',
+                          color: isVisible ? 'var(--text-primary)' : 'var(--text-disabled)',
+                          fontWeight: isVisible ? 500 : 400,
+                          transition: 'color var(--transition-fast)',
+                        }}
+                      >
+                        {l.label}
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        color: isVisible ? 'var(--text-muted)' : 'var(--text-disabled)',
+                        fontVariantNumeric: 'tabular-nums',
+                        transition: 'color var(--transition-fast)',
+                      }}
+                    >
+                      {count > 0 ? count.toLocaleString() : '—'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
-        
-        <div style={{ padding: 14, borderTop: '1px solid #262626', backgroundColor: 'rgba(10,10,10,0.5)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#525252' }}>
-            <span>Terminal V1.0</span>
-            <MdiIcon path={mdiCrosshairsGps} size={12} color="#525252" />
+
+        {/* Sidebar Footer */}
+        <div
+          style={{
+            padding: '12px 16px',
+            borderTop: '1px solid var(--border-subtle)',
+            backgroundColor: 'rgba(255,255,255,0.02)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: 10,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: 'var(--text-disabled)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            <span>AtlasMesh v2</span>
+            <MdiIcon path={mdiCrosshairsGps} size={12} color="var(--text-disabled)" />
           </div>
         </div>
       </div>
 
-      {/* Sidebar Toggle */}
-      <button 
+      {/* Sidebar Toggle Button */}
+      <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="glass-panel"
         style={{
           position: 'absolute',
-          bottom: 24, left: 24,
-          width: 40, height: 40,
-          backgroundColor: '#000',
-          border: '1px solid #262626',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          bottom: 24,
+          left: isMobile ? 12 : 24,
+          width: 42,
+          height: 42,
+          borderRadius: 10,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           color: '#fff',
           cursor: 'pointer',
-          transition: 'transform 0.5s cubic-bezier(0.16,1,0.3,1)',
-          transform: sidebarOpen ? 'translateX(300px)' : 'translateX(0)',
+          transition: 'transform var(--transition-slow), left var(--transition-slow)',
+          transform: sidebarOpen ? `translateX(${isMobile ? 'calc(100vw - 48px)' : '318px'})` : 'translateX(0)',
           pointerEvents: 'auto',
-          zIndex: 20,
+          zIndex: 25,
+          border: '1px solid rgba(255,255,255,0.10)',
         }}
+        title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
       >
-        {sidebarOpen ? <MdiIcon path={mdiMenuOpen} size={20} color="#ffffff" /> : <MdiIcon path={mdiMenu} size={20} color="#ffffff" />}
+        <MdiIcon
+          path={sidebarOpen ? mdiMenuOpen : mdiMenu}
+          size={20}
+          color="#ffffff"
+        />
       </button>
-
-      {/* Bottom Right Decoration */}
-      <div style={{ position: 'absolute', bottom: 24, right: 24, width: 128, height: 128, pointerEvents: 'none', opacity: 0.2 }}>
-        <div style={{ position: 'absolute', bottom: 0, right: 0, width: '100%', height: 1, backgroundColor: '#fff' }}></div>
-        <div style={{ position: 'absolute', bottom: 0, right: 0, width: 1, height: '100%', backgroundColor: '#fff' }}></div>
-        <div style={{ position: 'absolute', bottom: 8, right: 8, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.15em', color: '#fff' }}>SYS.OP.OK</div>
-      </div>
     </div>
+  );
+});
+
+/* ===== IconButton subcomponent ===== */
+function IconButton({
+  onClick,
+  title,
+  icon,
+  accent = false,
+}: {
+  onClick: () => void;
+  title: string;
+  icon: string;
+  accent?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: 6,
+        border: '1px solid rgba(255,255,255,0.08)',
+        background: accent ? 'rgba(56,189,248,0.10)' : 'rgba(255,255,255,0.03)',
+        color: accent ? 'var(--accent-primary)' : 'var(--text-secondary)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        transition: 'all var(--transition-fast)',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = accent ? 'rgba(56,189,248,0.18)' : 'rgba(255,255,255,0.08)';
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)';
+        e.currentTarget.style.color = accent ? 'var(--accent-primary)' : '#fff';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = accent ? 'rgba(56,189,248,0.10)' : 'rgba(255,255,255,0.03)';
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+        e.currentTarget.style.color = accent ? 'var(--accent-primary)' : 'var(--text-secondary)';
+      }}
+    >
+      <MdiIcon path={icon} size={16} />
+    </button>
   );
 }

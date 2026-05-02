@@ -4,6 +4,7 @@ import type { Entity } from '../../shared/entity';
 export type AISOptions = {
   url?: string;
   reconnectMs?: number;
+  batchMs?: number;
 };
 
 function toNumber(v: any): number | undefined {
@@ -13,20 +14,36 @@ function toNumber(v: any): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-/**
- * AISStream.io WebSocket adapter.
- * Sends the required subscription message on connect with API key and global bounding box.
- */
 export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: AISOptions) {
   const url = opts?.url ?? process.env.AISSTREAM_URL ?? 'wss://stream.aisstream.io/v0/stream';
   const token = process.env.AISSTREAM_TOKEN;
   let ws: WebSocket | null = null;
   let stopped = false;
   const reconnectMs = opts?.reconnectMs ?? 10000;
+  const batchMs = opts?.batchMs ?? 2000; // Batch window
 
   if (!token) {
     console.warn('AIS: No AISSTREAM_TOKEN set — skipping AIS source');
     return () => {};
+  }
+
+  // Buffer incoming entities and flush as batches
+  const buffer = new Map<string, Entity>();
+  let flushTimer: NodeJS.Timeout | null = null;
+
+  function flush() {
+    if (buffer.size === 0) return;
+    const batch = Array.from(buffer.values());
+    buffer.clear();
+    onEntities(batch);
+  }
+
+  function scheduleFlush() {
+    if (flushTimer) return;
+    flushTimer = setTimeout(() => {
+      flush();
+      flushTimer = null;
+    }, batchMs);
   }
 
   function connect() {
@@ -34,34 +51,26 @@ export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: 
 
     ws.on('open', () => {
       console.log('AIS WS connected to', url);
-      // AISStream requires a subscription message with API key and bounding boxes
       const subscriptionMsg = {
         APIKey: token,
-        BoundingBoxes: [
-          [[-90, -180], [90, 180]] // Global coverage
-        ],
+        BoundingBoxes: [[[-90, -180], [90, 180]]],
         FiltersShipMMSI: [],
         FilterMessageTypes: ["PositionReport"]
       };
       ws!.send(JSON.stringify(subscriptionMsg));
-      console.log('AIS: Sent subscription message');
     });
 
     ws.on('message', (data) => {
       try {
-        const text = data.toString();
-        const msg = JSON.parse(text);
-
-        // AISStream format: { Message: { PositionReport: {...} }, MetaData: {...} }
+        const msg = JSON.parse(data.toString());
         if (msg.Message?.PositionReport && msg.MetaData) {
           const pos = msg.Message.PositionReport;
           const meta = msg.MetaData;
-          
           const lat = toNumber(pos.Latitude);
           const lon = toNumber(pos.Longitude);
           if (lat === undefined || lon === undefined) return;
 
-          const mmsi = meta.MMSI?.toString() || Math.random().toString(36).slice(2, 9);
+          const mmsi = meta.MMSI?.toString() || 'unknown';
           const entity: Entity = {
             id: `ship:ais:${mmsi}`,
             type: 'ship',
@@ -77,15 +86,16 @@ export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: 
               cog: pos.Cog,
             }
           };
-          onEntities([entity]);
+          buffer.set(entity.id, entity);
+          scheduleFlush();
         }
-      } catch (err) {
+      } catch {
         // ignore parse errors
       }
     });
 
     ws.on('close', () => {
-      console.log('AIS WS closed');
+      flush(); // flush remaining on disconnect
       if (!stopped) setTimeout(connect, reconnectMs);
     });
 
@@ -99,6 +109,8 @@ export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: 
 
   return () => {
     stopped = true;
+    if (flushTimer) clearTimeout(flushTimer);
+    flush();
     try { ws?.close(); } catch (e) {}
   };
 }

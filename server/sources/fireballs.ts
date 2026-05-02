@@ -71,8 +71,8 @@ export function startFireballsSource(
         const idDate = typeof dateRaw === 'string' ? dateRaw.replace(/[^0-9]/g, '') : `${idx}`;
 
         entities.push({
-          id: `event:fireball:${idDate}:${idx}`,
-          type: 'event',
+          id: `fireball:${idDate}:${idx}`,
+          type: 'fireball',
           position: { lat, lon, alt: altitudeKm && Number.isFinite(altitudeKm) ? altitudeKm * 1000 : undefined },
           timestamp: Number.isFinite(when) ? when : Date.now(),
           metadata: {

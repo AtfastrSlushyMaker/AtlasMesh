@@ -1,0 +1,512 @@
+{
+  "nodes": [
+    {
+      "id": "33fcf5a351454c73",
+      "type": "text",
+      "x": 400,
+      "y": 300,
+      "width": 180,
+      "height": 80,
+      "text": "**CesiumApp**\ncomm:0",
+      "color": "1"
+    },
+    {
+      "id": "3e93e69e892b4fd4",
+      "type": "text",
+      "x": 400,
+      "y": 500,
+      "width": 180,
+      "height": 80,
+      "text": "**Common Entity Position Schema**\ncomm:1",
+      "color": "2"
+    },
+    {
+      "id": "c5e8a0bfe6a24032",
+      "type": "text",
+      "x": 700,
+      "y": 400,
+      "width": 180,
+      "height": 80,
+      "text": "**useEntityLayer**\ncomm:2",
+      "color": "3"
+    },
+    {
+      "id": "5d1d582b74b445e3",
+      "type": "text",
+      "x": 100,
+      "y": 300,
+      "width": 180,
+      "height": 80,
+      "text": "**EntityStore**\ncomm:0",
+      "color": "1"
+    },
+    {
+      "id": "d9e08defb61547d8",
+      "type": "text",
+      "x": 100,
+      "y": 450,
+      "width": 180,
+      "height": 80,
+      "text": "**Entity**\ncomm:0",
+      "color": "1"
+    },
+    {
+      "id": "44648ba695a94afa",
+      "type": "text",
+      "x": 400,
+      "y": 100,
+      "width": 180,
+      "height": 80,
+      "text": "**startEventsSource**\ncomm:5",
+      "color": "6"
+    },
+    {
+      "id": "ba3a3eb4b40d44c7",
+      "type": "text",
+      "x": 700,
+      "y": 200,
+      "width": 180,
+      "height": 80,
+      "text": "**LightningLayer**\ncomm:2",
+      "color": "3"
+    },
+    {
+      "id": "53e5b7546d3f4a5e",
+      "type": "text",
+      "x": 700,
+      "y": 600,
+      "width": 180,
+      "height": 80,
+      "text": "**SatelliteLayer**\ncomm:2",
+      "color": "3"
+    },
+    {
+      "id": "72e471f920c34935",
+      "type": "text",
+      "x": 1000,
+      "y": 600,
+      "width": 180,
+      "height": 80,
+      "text": "**startSatellitesSource**\ncomm:6",
+      "color": "1"
+    },
+    {
+      "id": "2d305f5dbe3a470d",
+      "type": "text",
+      "x": 1000,
+      "y": 100,
+      "width": 180,
+      "height": 80,
+      "text": "**startWildfiresSource**\ncomm:3",
+      "color": "4"
+    },
+    {
+      "id": "cbced756425c474d",
+      "type": "text",
+      "x": 1000,
+      "y": 300,
+      "width": 180,
+      "height": 80,
+      "text": "**startAISSource**\ncomm:4",
+      "color": "5"
+    },
+    {
+      "id": "d6f2b817774a4a10",
+      "type": "text",
+      "x": 1000,
+      "y": 450,
+      "width": 180,
+      "height": 80,
+      "text": "**startAircraftSource**\ncomm:4",
+      "color": "5"
+    },
+    {
+      "id": "461eea2b782d4c29",
+      "type": "text",
+      "x": 400,
+      "y": 700,
+      "width": 180,
+      "height": 80,
+      "text": "**AppUI**\ncomm:0",
+      "color": "1"
+    },
+    {
+      "id": "acbecf3d56e6459d",
+      "type": "text",
+      "x": 700,
+      "y": 100,
+      "width": 180,
+      "height": 80,
+      "text": "**EarthquakeLayer**\ncomm:1",
+      "color": "2"
+    },
+    {
+      "id": "5b765f71f13547fd",
+      "type": "text",
+      "x": 100,
+      "y": 100,
+      "width": 180,
+      "height": 80,
+      "text": "**createSourceHandler**\ncomm:0",
+      "color": "1"
+    },
+    {
+      "id": "ae4f9038375f4e0f",
+      "type": "text",
+      "x": 250,
+      "y": 200,
+      "width": 180,
+      "height": 80,
+      "text": "**broadcastDiff**\ncomm:0",
+      "color": "1"
+    },
+    {
+      "id": "49e42404cb574a8e",
+      "type": "text",
+      "x": 250,
+      "y": 500,
+      "width": 180,
+      "height": 80,
+      "text": "**useWebSocket**\ncomm:0",
+      "color": "1"
+    },
+    {
+      "id": "d20b149143994a2e",
+      "type": "text",
+      "x": 250,
+      "y": 700,
+      "width": 180,
+      "height": 80,
+      "text": "**EntityInfoPanel**\ncomm:0",
+      "color": "1"
+    },
+    {
+      "id": "5a1e5d92d0f14756",
+      "type": "text",
+      "x": 550,
+      "y": 400,
+      "width": 180,
+      "height": 80,
+      "text": "**LayerManager**\ncomm:2",
+      "color": "3"
+    },
+    {
+      "id": "cccb1ae59ca843b9",
+      "type": "text",
+      "x": 700,
+      "y": 700,
+      "width": 180,
+      "height": 80,
+      "text": "**WeatherLayer**\ncomm:1",
+      "color": "2"
+    },
+    {
+      "id": "59d6fa635c1a4f2c",
+      "type": "text",
+      "x": 700,
+      "y": 800,
+      "width": 180,
+      "height": 80,
+      "text": "**ShipLayer**\ncomm:1",
+      "color": "2"
+    },
+    {
+      "id": "1bc43483c74b4875",
+      "type": "text",
+      "x": 700,
+      "y": 0,
+      "width": 180,
+      "height": 80,
+      "text": "**VolcanoLayer**\ncomm:1",
+      "color": "2"
+    },
+    {
+      "id": "c94d8dc4814b461c",
+      "type": "text",
+      "x": 700,
+      "y": 300,
+      "width": 180,
+      "height": 80,
+      "text": "**WildfireLayer**\ncomm:2",
+      "color": "3"
+    },
+    {
+      "id": "10515a36e40449c5",
+      "type": "text",
+      "x": 550,
+      "y": 100,
+      "width": 180,
+      "height": 80,
+      "text": "**EventLayer**\ncomm:1",
+      "color": "2"
+    },
+    {
+      "id": "bb4fa6dabddd45b2",
+      "type": "text",
+      "x": 700,
+      "y": 900,
+      "width": 180,
+      "height": 80,
+      "text": "**CableLayer**\ncomm:1",
+      "color": "2"
+    },
+    {
+      "id": "7268cbd7fc944282",
+      "type": "text",
+      "x": 550,
+      "y": 600,
+      "width": 180,
+      "height": 80,
+      "text": "**LaunchLayer**\ncomm:1",
+      "color": "2"
+    },
+    {
+      "id": "75702f86d1814639",
+      "type": "text",
+      "x": 0,
+      "y": 700,
+      "width": 180,
+      "height": 80,
+      "text": "**AtlasMesh**\ncomm:86",
+      "color": "6"
+    },
+    {
+      "id": "dc2831f15ef846ec",
+      "type": "group",
+      "x": 50,
+      "y": 50,
+      "width": 500,
+      "height": 400,
+      "label": "Core Architecture",
+      "color": "1"
+    },
+    {
+      "id": "b3c51e5a7e164468",
+      "type": "group",
+      "x": 500,
+      "y": -50,
+      "width": 400,
+      "height": 500,
+      "label": "Geospatial Layers",
+      "color": "2"
+    },
+    {
+      "id": "28b4470517ea442c",
+      "type": "group",
+      "x": 950,
+      "y": -50,
+      "width": 300,
+      "height": 700,
+      "label": "Data Sources",
+      "color": "4"
+    },
+    {
+      "id": "fd7641d41d3a45f6",
+      "type": "group",
+      "x": 50,
+      "y": 500,
+      "width": 400,
+      "height": 300,
+      "label": "Server & Shared",
+      "color": "5"
+    }
+  ],
+  "edges": [
+    {
+      "id": "9ea8942a1bb3418c",
+      "fromNode": "44648ba695a94afa",
+      "toNode": "2d305f5dbe3a470d",
+      "label": "semantically_similar_to [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "592e1f1948e840af",
+      "fromNode": "cbced756425c474d",
+      "toNode": "d6f2b817774a4a10",
+      "label": "semantically_similar_to [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "4fc972070d9346b5",
+      "fromNode": "5d1d582b74b445e3",
+      "toNode": "d9e08defb61547d8",
+      "label": "references [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "a2fb2ba2bc8c4851",
+      "fromNode": "5d1d582b74b445e3",
+      "toNode": "5b765f71f13547fd",
+      "label": "calls [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "c2ba061ab7fb4c5a",
+      "fromNode": "5d1d582b74b445e3",
+      "toNode": "ae4f9038375f4e0f",
+      "label": "conceptually_related_to [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "e5a8511695984d08",
+      "fromNode": "5d1d582b74b445e3",
+      "toNode": "33fcf5a351454c73",
+      "label": "conceptually_related_to [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "cd5a00327888479b",
+      "fromNode": "ae4f9038375f4e0f",
+      "toNode": "5b765f71f13547fd",
+      "label": "calls [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "078df817da944687",
+      "fromNode": "ae4f9038375f4e0f",
+      "toNode": "49e42404cb574a8e",
+      "label": "conceptually_related_to [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "cb485fbe11b7423b",
+      "fromNode": "d9e08defb61547d8",
+      "toNode": "d20b149143994a2e",
+      "label": "references [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "05ecbab5c7f94081",
+      "fromNode": "d9e08defb61547d8",
+      "toNode": "461eea2b782d4c29",
+      "label": "references [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "0297460b355e442d",
+      "fromNode": "d20b149143994a2e",
+      "toNode": "33fcf5a351454c73",
+      "label": "references [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "34aabc8f70a74cab",
+      "fromNode": "461eea2b782d4c29",
+      "toNode": "33fcf5a351454c73",
+      "label": "references [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "8ec185eb29dd4da8",
+      "fromNode": "49e42404cb574a8e",
+      "toNode": "33fcf5a351454c73",
+      "label": "calls [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "663c35c9443049b6",
+      "fromNode": "1bc43483c74b4875",
+      "toNode": "3e93e69e892b4fd4",
+      "label": "shares_data_with [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "a000add3434f45c4",
+      "fromNode": "1bc43483c74b4875",
+      "toNode": "acbecf3d56e6459d",
+      "label": "conceptually_related_to [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "07c948e9d2f54a50",
+      "fromNode": "c94d8dc4814b461c",
+      "toNode": "3e93e69e892b4fd4",
+      "label": "shares_data_with [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "a7fb074e61244e26",
+      "fromNode": "c94d8dc4814b461c",
+      "toNode": "ba3a3eb4b40d44c7",
+      "label": "semantically_similar_to [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "1b74bd2047674781",
+      "fromNode": "10515a36e40449c5",
+      "toNode": "3e93e69e892b4fd4",
+      "label": "shares_data_with [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "287270ee6c7b4805",
+      "fromNode": "acbecf3d56e6459d",
+      "toNode": "3e93e69e892b4fd4",
+      "label": "shares_data_with [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "8c7856340f9242d3",
+      "fromNode": "cccb1ae59ca843b9",
+      "toNode": "3e93e69e892b4fd4",
+      "label": "shares_data_with [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "374c533cc53c49f8",
+      "fromNode": "7268cbd7fc944282",
+      "toNode": "3e93e69e892b4fd4",
+      "label": "shares_data_with [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "ac5b51386ce74570",
+      "fromNode": "ba3a3eb4b40d44c7",
+      "toNode": "3e93e69e892b4fd4",
+      "label": "shares_data_with [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "dc871b053d454d6a",
+      "fromNode": "ba3a3eb4b40d44c7",
+      "toNode": "53e5b7546d3f4a5e",
+      "label": "semantically_similar_to [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "4aa1964506314491",
+      "fromNode": "ba3a3eb4b40d44c7",
+      "toNode": "c5e8a0bfe6a24032",
+      "label": "conceptually_related_to [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "6176ea73102f4461",
+      "fromNode": "bb4fa6dabddd45b2",
+      "toNode": "3e93e69e892b4fd4",
+      "label": "shares_data_with [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "5428a525779840c5",
+      "fromNode": "53e5b7546d3f4a5e",
+      "toNode": "3e93e69e892b4fd4",
+      "label": "shares_data_with [EXTRACTED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "bb9b96d6f8c64548",
+      "fromNode": "53e5b7546d3f4a5e",
+      "toNode": "c5e8a0bfe6a24032",
+      "label": "conceptually_related_to [INFERRED]",
+      "toEnd": "arrow"
+    },
+    {
+      "id": "620935f34ac741f3",
+      "fromNode": "59d6fa635c1a4f2c",
+      "toNode": "3e93e69e892b4fd4",
+      "label": "shares_data_with [EXTRACTED]",
+      "toEnd": "arrow"
+    }
+  ]
+}

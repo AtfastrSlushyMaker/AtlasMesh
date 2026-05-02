@@ -1,13 +1,14 @@
+import { memo } from 'react';
 import { useEntityLayer, LayerProps } from './useEntityLayer';
 import { useEffect, useRef } from 'react';
 import { Icons } from '../../utils/icons';
 
-export function LightningLayer({ viewer, visible }: LayerProps) {
+export const LightningLayer = memo(function LightningLayer({ viewer, visible }: LayerProps) {
   const Cesium = (viewer as any).__cesium;
   const activeStrikes = useRef(new Map<string, number>());
 
   useEntityLayer({
-    viewer,  visible, type: 'lightning',
+    viewer, visible, type: 'lightning',
     onAdd: (e, v) => {
       if (!Cesium) return null;
       activeStrikes.current.set(e.id, Date.now());
@@ -32,7 +33,7 @@ export function LightningLayer({ viewer, visible }: LayerProps) {
     const interval = setInterval(() => {
       const now = Date.now();
       activeStrikes.current.forEach((time, id) => {
-        if (now - time > 1500) { // 1.5s lifetime
+        if (now - time > 1500) {
           viewer.entities.removeById(id);
           activeStrikes.current.delete(id);
         }
@@ -43,4 +44,4 @@ export function LightningLayer({ viewer, visible }: LayerProps) {
   }, [viewer, visible]);
 
   return null;
-}
+});

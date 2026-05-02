@@ -1,14 +1,21 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, Suspense } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { LayerManager } from '../components/layers/LayerManager';
 import { AppUI } from '../ui/AppUI';
 import { EntityInfoPanel } from '../ui/EntityInfoPanel';
+import { ToastProvider, useToast } from '../ui/Toast';
+import { KeyboardHelpModal } from '../ui/KeyboardHelpModal';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { LoadingScreen } from '../components/LoadingScreen';
+import { useKeyboardShortcuts, Shortcut } from '../hooks/useKeyboardShortcuts';
 import * as Cesium from 'cesium';
+import '../styles/design-system.css';
 
-export default function CesiumApp() {
+function CesiumAppInner() {
   const viewerRef = useRef<any>(null);
   const cullLastRunAtRef = useRef(0);
   const [viewerReady, setViewerReady] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { connected, lastMessage } = useWebSocket(viewerReady ? 'ws://localhost:3000' : null);
   const [visibility, setVisibility] = useState<Record<string, boolean>>({});
   const [stats, setStats] = useState<Record<string, number>>({});
@@ -21,150 +28,174 @@ export default function CesiumApp() {
     lon: number;
     alt?: number;
   }>>([]);
+  const toast = useToast();
 
+  // Initialize Cesium Viewer
   useEffect(() => {
-    try {
-      // Disable default Cesium Ion token warning
-      (Cesium.Ion as any).defaultAccessToken = undefined;
+    let mounted = true;
 
-      const viewer = new Cesium.Viewer('cesiumContainer', {
-        timeline: false,
-        animation: false,
-        selectionIndicator: false,
-        baseLayerPicker: false,
-        geocoder: false,
-        homeButton: false,
-        infoBox: false,
-        sceneModePicker: false,
-        navigationHelpButton: false,
-        navigationInstructionsInitiallyVisible: false,
-        fullscreenButton: false,
-        creditContainer: document.createElement('div'), // Hide credits bar
-        requestRenderMode: false,
-        // Use dark CartoDB tiles
-        baseLayer: new Cesium.ImageryLayer(
-          new Cesium.UrlTemplateImageryProvider({
-            url: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-            credit: 'CartoDB',
-          })
-        ),
-      });
+    async function init() {
+      try {
+        (Cesium.Ion as any).defaultAccessToken = undefined;
 
-      // Keep render loop alive even if a render-time asset decode fails.
-      viewer.scene.rethrowRenderErrors = false;
-      const onRenderError = (_scene: any, err: any) => {
-        console.error('Cesium render error (recovered):', {
-          name: err?.name,
-          message: err?.message,
-          stack: err?.stack,
-          cesiumBaseUrl: (window as any).CESIUM_BASE_URL,
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+          timeline: false,
+          animation: false,
+          selectionIndicator: false,
+          baseLayerPicker: false,
+          geocoder: false,
+          homeButton: false,
+          infoBox: false,
+          sceneModePicker: false,
+          navigationHelpButton: false,
+          navigationInstructionsInitiallyVisible: false,
+          fullscreenButton: false,
+          creditContainer: document.createElement('div'),
+          requestRenderMode: false,
+          baseLayer: new Cesium.ImageryLayer(
+            new Cesium.UrlTemplateImageryProvider({
+              url: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+              credit: 'CartoDB',
+            })
+          ),
         });
-        if (String(err?.message || '').includes('source image could not be decoded')) {
-          console.warn('[Cesium] Decode failure usually means an icon/worker/asset URL returned invalid content. Check /cesium/* network responses.');
-        }
-        viewer.useDefaultRenderLoop = true;
-      };
-      viewer.scene.renderError.addEventListener(onRenderError);
 
-      if (import.meta.env.DEV) {
-        const baseUrl = (window as any).CESIUM_BASE_URL || '/cesium/';
-        const probe = async (relativePath: string) => {
-          try {
-            const url = `${baseUrl}${relativePath}`;
-            const res = await fetch(url, { method: 'GET' });
-            const contentType = res.headers.get('content-type') || 'unknown';
-            const sample = await res.text();
-            const preview = sample.slice(0, 64).replace(/\s+/g, ' ');
-            console.info('[Cesium] Asset probe', { url, status: res.status, contentType, preview });
-          } catch (probeErr) {
-            console.warn('[Cesium] Asset probe failed', { relativePath, probeErr });
+        viewer.scene.rethrowRenderErrors = false;
+        const onRenderError = (_scene: any, err: any) => {
+          console.error('Cesium render error (recovered):', {
+            name: err?.name,
+            message: err?.message,
+          });
+          viewer.useDefaultRenderLoop = true;
+        };
+        viewer.scene.renderError.addEventListener(onRenderError);
+
+        // Globe appearance
+        viewer.scene.globe.enableLighting = true;
+        viewer.scene.globe.nightFadeOutDistance = 10000000.0;
+        viewer.scene.globe.nightFadeInDistance = 50000000.0;
+        viewer.scene.globe.showGroundAtmosphere = true;
+        viewer.scene.backgroundColor = Cesium.Color.BLACK;
+
+        // Atmosphere
+        viewer.scene.skyAtmosphere.hueShift = -0.08;
+        viewer.scene.skyAtmosphere.saturationShift = -0.3;
+        viewer.scene.skyAtmosphere.brightnessShift = -0.2;
+
+        // Camera controls
+        viewer.scene.screenSpaceCameraController.enableZoom = true;
+        viewer.scene.screenSpaceCameraController.enableInputs = true;
+        viewer.scene.screenSpaceCameraController.enableRotate = true;
+        viewer.scene.screenSpaceCameraController.enableTilt = true;
+        viewer.scene.screenSpaceCameraController.enableLook = true;
+        viewer.scene.screenSpaceCameraController.inertiaZoom = 0.8;
+        viewer.scene.screenSpaceCameraController.inertiaSpin = 0.9;
+        viewer.scene.screenSpaceCameraController.inertiaTranslate = 0.9;
+        viewer.scene.screenSpaceCameraController.minimumZoomDistance = 100;
+        viewer.scene.screenSpaceCameraController.maximumZoomDistance = 50000000;
+
+        // Clock
+        viewer.clock.shouldAnimate = true;
+        viewer.clock.clockRange = Cesium.ClockRange.UNBOUNDED;
+        viewer.clock.multiplier = 1;
+
+        // Touchpad-friendly zoom: intercept wheel and use smooth camera movement
+        const canvas = viewer.scene.canvas as HTMLCanvasElement;
+        let zoomTarget = 0;
+        let zoomAnimId: number | null = null;
+
+        const smoothZoom = () => {
+          if (Math.abs(zoomTarget) < 1) {
+            zoomTarget = 0;
+            zoomAnimId = null;
+            return;
+          }
+          const step = zoomTarget * 0.15;
+          zoomTarget -= step;
+          const cameraHeight = viewer.camera.positionCartographic.height;
+          const moveDistance = Math.max(100, cameraHeight * 0.002) * Math.sign(step) * Math.min(Math.abs(step), 50);
+          if (moveDistance > 0) {
+            viewer.camera.moveBackward(moveDistance);
+          } else {
+            viewer.camera.moveForward(-moveDistance);
+          }
+          zoomAnimId = requestAnimationFrame(smoothZoom);
+        };
+
+        const onWheel = (e: WheelEvent) => {
+          e.preventDefault();
+          const delta = e.deltaY;
+          // Normalize trackpad vs mouse wheel
+          const sensitivity = e.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? 0.5 : 4;
+          zoomTarget += delta * sensitivity;
+          // Clamp to prevent runaway zoom
+          zoomTarget = Math.max(-3000, Math.min(3000, zoomTarget));
+          if (!zoomAnimId) {
+            zoomAnimId = requestAnimationFrame(smoothZoom);
           }
         };
 
-        void probe('Workers/createTaskProcessorWorker.js');
-        void probe('Assets/approximateTerrainHeights.json');
-      }
+        canvas.addEventListener('wheel', onWheel, { passive: false });
+        (viewer as any).__wheelHandler = onWheel;
 
-      // Globe appearance
-      viewer.scene.globe.enableLighting = true;
-      viewer.scene.globe.nightFadeOutDistance = 10000000.0;
-      viewer.scene.globe.nightFadeInDistance = 50000000.0;
-      viewer.scene.globe.showGroundAtmosphere = true;
-      viewer.scene.backgroundColor = Cesium.Color.BLACK;
+        // Click handler
+        const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        handler.setInputAction((click: any) => {
+          const pickedObject = viewer.scene.pick(click.position);
+          if (Cesium.defined(pickedObject) && pickedObject.id) {
+            const entity = pickedObject.id;
+            const id = entity.id || '';
+            const type = (entity as any)._entityType || id.split(':')[0] || 'unknown';
 
-      // Dark atmosphere
-      viewer.scene.skyAtmosphere.hueShift = -0.08;
-      viewer.scene.skyAtmosphere.saturationShift = -0.3;
-      viewer.scene.skyAtmosphere.brightnessShift = -0.2;
+            let posInfo: Record<string, string> = {};
+            if (entity.position) {
+              try {
+                const cartesian = typeof entity.position.getValue === 'function'
+                  ? entity.position.getValue(viewer.clock.currentTime)
+                  : entity.position;
+                if (cartesian) {
+                  const carto = Cesium.Cartographic.fromCartesian(cartesian);
+                  posInfo = {
+                    lat: Cesium.Math.toDegrees(carto.latitude).toFixed(4),
+                    lon: Cesium.Math.toDegrees(carto.longitude).toFixed(4),
+                    alt: (carto.height / 1000).toFixed(1) + ' km',
+                  };
+                }
+              } catch (e) { }
+            }
 
-      // Smooth camera controls
-      viewer.scene.screenSpaceCameraController.enableZoom = true;
-      viewer.scene.screenSpaceCameraController.enableInputs = true;
-      viewer.scene.screenSpaceCameraController.enableRotate = true;
-      viewer.scene.screenSpaceCameraController.enableTilt = true;
-      viewer.scene.screenSpaceCameraController.enableLook = true;
-      viewer.scene.screenSpaceCameraController.inertiaZoom = 0.8;
-      viewer.scene.screenSpaceCameraController.inertiaSpin = 0.9;
-      viewer.scene.screenSpaceCameraController.inertiaTranslate = 0.9;
-      viewer.scene.screenSpaceCameraController.minimumZoomDistance = 100;
-      viewer.scene.screenSpaceCameraController.maximumZoomDistance = 50000000;
-
-      // Clock
-      viewer.clock.shouldAnimate = true;
-      viewer.clock.clockRange = Cesium.ClockRange.UNBOUNDED;
-      viewer.clock.multiplier = 1;
-
-      // Click handler for entity selection
-      const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-      handler.setInputAction((click: any) => {
-        const pickedObject = viewer.scene.pick(click.position);
-        if (Cesium.defined(pickedObject) && pickedObject.id) {
-          const entity = pickedObject.id;
-          // Build info object from entity
-          const id = entity.id || '';
-          const type = (entity as any)._entityType || id.split(':')[0] || 'unknown';
-
-          // Get position
-          let posInfo = {};
-          if (entity.position) {
-            try {
-              const cartesian = typeof entity.position.getValue === 'function'
-                ? entity.position.getValue(viewer.clock.currentTime)
-                : entity.position;
-              if (cartesian) {
-                const carto = Cesium.Cartographic.fromCartesian(cartesian);
-                posInfo = {
-                  lat: Cesium.Math.toDegrees(carto.latitude).toFixed(4),
-                  lon: Cesium.Math.toDegrees(carto.longitude).toFixed(4),
-                  alt: (carto.height / 1000).toFixed(1) + ' km',
-                };
-              }
-            } catch (e) { }
+            setSelectedEntity({
+              id,
+              type,
+              position: posInfo,
+              metadata: (entity as any)._metadata || {},
+              name: (entity as any)._displayName || id,
+            });
+          } else {
+            setSelectedEntity(null);
           }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-          setSelectedEntity({
-            id,
-            type,
-            position: posInfo,
-            metadata: (entity as any)._metadata || {},
-            name: (entity as any)._displayName || id,
-          });
-        } else {
-          setSelectedEntity(null);
+        (viewer as any).__cesium = Cesium;
+        (viewer as any).__handler = handler;
+        (viewer as any).__renderErrorHandler = onRenderError;
+
+        if (mounted) {
+          viewerRef.current = viewer;
+          setViewerReady(true);
+          setTimeout(() => setLoading(false), 800);
         }
-      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
-      // Store Cesium reference
-      (viewer as any).__cesium = Cesium;
-      (viewer as any).__handler = handler;
-      (viewer as any).__renderErrorHandler = onRenderError;
-      viewerRef.current = viewer;
-      setViewerReady(true);
-    } catch (e) {
-      console.error('Cesium failed to load', e);
+      } catch (e) {
+        console.error('Cesium failed to load', e);
+        toast.addToast('Failed to initialize 3D globe', 'error', 6000);
+        setLoading(false);
+      }
     }
 
+    init();
+
     return () => {
+      mounted = false;
       if (viewerRef.current) {
         try {
           if ((viewerRef.current as any).__handler) {
@@ -173,6 +204,9 @@ export default function CesiumApp() {
           if ((viewerRef.current as any).__renderErrorHandler) {
             viewerRef.current.scene.renderError.removeEventListener((viewerRef.current as any).__renderErrorHandler);
           }
+          if ((viewerRef.current as any).__wheelHandler) {
+            (viewerRef.current.scene.canvas as HTMLCanvasElement).removeEventListener('wheel', (viewerRef.current as any).__wheelHandler);
+          }
           viewerRef.current.destroy();
         } catch (e) { }
         viewerRef.current = null;
@@ -180,49 +214,35 @@ export default function CesiumApp() {
     };
   }, []);
 
-  // Recount entity stats
+  // Recount entity stats on websocket messages
   useEffect(() => {
     if (!viewerReady) return;
-    const recount = () => {
-      const counts: Record<string, number> = {};
-      const entities = viewerRef.current.entities.values;
-      entities.forEach((ent: any) => {
-        const type = ent._entityType || ent.id?.split(':')?.[0];
-        if (type) {
-          counts[type] = (counts[type] || 0) + 1;
-        }
-      });
-      setStats(counts);
-    };
-    recount();
+    const counts: Record<string, number> = {};
+    const entities = viewerRef.current.entities.values;
+    entities.forEach((ent: any) => {
+      const type = ent._entityType || ent.id?.split(':')?.[0];
+      if (type) counts[type] = (counts[type] || 0) + 1;
+    });
+    setStats(counts);
   }, [lastMessage, viewerReady]);
 
-  // Periodic recount
+  // Periodic recount and search index update
   useEffect(() => {
     if (!viewerReady) return;
     const interval = setInterval(() => {
       const counts: Record<string, number> = {};
       const dataSources = viewerRef.current?.dataSources;
-      if (dataSources) {
-        const nextSearchItems: Array<{
-          id: string;
-          name: string;
-          type: string;
-          lat: number;
-          lon: number;
-          alt?: number;
-        }> = [];
+      const nextSearchItems: typeof searchItems = [];
 
+      if (dataSources) {
         for (let i = 0; i < dataSources.length; i++) {
           const ds = dataSources.get(i);
           const entities = ds.entities.values;
           entities.forEach((ent: any) => {
             const type = ent._entityType || ent.id?.split(':')?.[0];
-            if (type) {
-              counts[type] = (counts[type] || 0) + 1;
-            }
+            if (type) counts[type] = (counts[type] || 0) + 1;
 
-            if (nextSearchItems.length < 12000) {
+            if (nextSearchItems.length < 15000) {
               let cartesian: any = null;
               if (ent.position) {
                 cartesian = typeof ent.position.getValue === 'function'
@@ -245,11 +265,10 @@ export default function CesiumApp() {
             }
           });
         }
-
-        setSearchItems(nextSearchItems);
       }
+      setSearchItems(nextSearchItems);
       setStats(counts);
-    }, 2500);
+    }, 3000);
     return () => clearInterval(interval);
   }, [viewerReady]);
 
@@ -262,10 +281,7 @@ export default function CesiumApp() {
       for (let i = 0; i < viewer.dataSources.length; i++) {
         const ds = viewer.dataSources.get(i);
         const found = ds.entities.getById(item.id);
-        if (found) {
-          entity = found;
-          break;
-        }
+        if (found) { entity = found; break; }
       }
     }
 
@@ -274,15 +290,9 @@ export default function CesiumApp() {
 
     viewer.camera.flyTo({
       destination: targetPosition,
-      orientation: {
-        heading: viewer.camera.heading,
-        pitch: Cesium.Math.toRadians(-50),
-        roll: 0,
-      },
-      duration: 1.35,
-      complete: () => {
-        viewer.camera.moveBackward(baseRange);
-      },
+      orientation: { heading: viewer.camera.heading, pitch: Cesium.Math.toRadians(-50), roll: 0 },
+      duration: 1.4,
+      complete: () => viewer.camera.moveBackward(baseRange),
     });
 
     if (entity) {
@@ -304,14 +314,14 @@ export default function CesiumApp() {
     const viewer = viewerRef.current;
     if (!viewer) return;
     const h = viewer.camera.positionCartographic.height;
-    viewer.camera.zoomIn(Math.max(30000, h * 0.32));
+    viewer.camera.zoomIn(Math.max(30000, h * 0.3));
   }, []);
 
   const onZoomOut = useCallback(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
     const h = viewer.camera.positionCartographic.height;
-    viewer.camera.zoomOut(Math.max(30000, h * 0.32));
+    viewer.camera.zoomOut(Math.max(30000, h * 0.3));
   }, []);
 
   const onResetView = useCallback(() => {
@@ -320,10 +330,27 @@ export default function CesiumApp() {
     viewer.camera.flyHome(1.2);
   }, []);
 
-  // Hide entities on the far side of the globe to reduce render load.
+  const onToggleHelp = useCallback(() => {
+    // Handled by KeyboardHelpModal internally via '?' key
+    // This is a no-op but required for prop typing
+  }, []);
+
+  // Keyboard shortcuts
+  const shortcuts: Shortcut[] = [
+    { key: 'r', description: 'Reset camera view', action: onResetView },
+    { key: '=', description: 'Zoom in', action: onZoomIn },
+    { key: '-', description: 'Zoom out', action: onZoomOut },
+    { key: 'Escape', description: 'Close entity panel', action: () => setSelectedEntity(null) },
+    { key: '1', ctrl: true, description: 'Toggle Aircraft layer', action: () => setVisibility(p => ({ ...p, aircraft: !(p.aircraft ?? true) })) },
+    { key: '2', ctrl: true, description: 'Toggle Ships layer', action: () => setVisibility(p => ({ ...p, ship: !(p.ship ?? true) })) },
+    { key: '3', ctrl: true, description: 'Toggle Satellites layer', action: () => setVisibility(p => ({ ...p, satellite: !(p.satellite ?? true) })) },
+    { key: 'k', ctrl: true, description: 'Focus search', action: () => {} },
+  ];
+  useKeyboardShortcuts(shortcuts);
+
+  // Occlusion culling
   useEffect(() => {
     if (!viewerReady || !viewerRef.current) return;
-
     const viewer = viewerRef.current;
     const CesiumRef = (viewer as any).__cesium;
     if (!CesiumRef) return;
@@ -331,13 +358,11 @@ export default function CesiumApp() {
     const isEntityVisibleFromCamera = (entity: any): boolean => {
       try {
         let samplePoint: any = null;
-
         if (entity.position) {
           samplePoint = typeof entity.position.getValue === 'function'
             ? entity.position.getValue(viewer.clock.currentTime)
             : entity.position;
         }
-
         if (!samplePoint && entity.polyline?.positions) {
           const positions = typeof entity.polyline.positions.getValue === 'function'
             ? entity.polyline.positions.getValue(viewer.clock.currentTime)
@@ -346,14 +371,8 @@ export default function CesiumApp() {
             samplePoint = positions[Math.floor(positions.length / 2)];
           }
         }
-
         if (!samplePoint) return true;
-
-        const occluder = new CesiumRef.EllipsoidalOccluder(
-          viewer.scene.globe.ellipsoid,
-          viewer.camera.positionWC
-        );
-
+        const occluder = new CesiumRef.EllipsoidalOccluder(viewer.scene.globe.ellipsoid, viewer.camera.positionWC);
         return occluder.isPointVisible(samplePoint);
       } catch {
         return true;
@@ -362,7 +381,7 @@ export default function CesiumApp() {
 
     const applyCulling = () => {
       const now = Date.now();
-      if (now - cullLastRunAtRef.current < 120) return;
+      if (now - cullLastRunAtRef.current < 150) return;
       cullLastRunAtRef.current = now;
 
       for (let i = 0; i < viewer.dataSources.length; i++) {
@@ -392,15 +411,22 @@ export default function CesiumApp() {
   }, [viewerReady, visibility]);
 
   return (
-    <div style={{ height: '100vh', width: '100vw', position: 'relative', backgroundColor: '#000', fontFamily: "'Inter', sans-serif" }}>
+    <div
+      style={{
+        height: '100vh',
+        width: '100vw',
+        position: 'relative',
+        backgroundColor: '#000',
+        overflow: 'hidden',
+      }}
+    >
+      {loading && <LoadingScreen message="Loading Cesium Engine..." />}
+
       <div id="cesiumContainer" style={{ position: 'absolute', inset: 0 }} />
 
       {viewerReady && (
         <>
-          <LayerManager 
-            viewer={viewerRef.current} 
-            visibility={visibility} 
-          />
+          <LayerManager viewer={viewerRef.current} visibility={visibility} />
           <AppUI
             connected={connected}
             visibility={visibility}
@@ -411,6 +437,8 @@ export default function CesiumApp() {
             onZoomIn={onZoomIn}
             onZoomOut={onZoomOut}
             onResetView={onResetView}
+            onToggleHelp={onToggleHelp}
+            viewer={viewerRef.current}
           />
           {selectedEntity && (
             <EntityInfoPanel
@@ -418,8 +446,19 @@ export default function CesiumApp() {
               onClose={() => setSelectedEntity(null)}
             />
           )}
+          <KeyboardHelpModal shortcuts={shortcuts} />
         </>
       )}
     </div>
+  );
+}
+
+export default function CesiumApp() {
+  return (
+    <ErrorBoundary>
+      <ToastProvider>
+        <CesiumAppInner />
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
