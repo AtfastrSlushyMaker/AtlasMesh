@@ -1,16 +1,16 @@
 /* AtlasMesh Design System v2.0 */
 /* Dark Mode OLED-optimized with glassmorphism */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  /* Backgrounds */
-  --bg-base: #020617;
+  /* Backgrounds — never use pure black, always tinted dark */
+  --bg-base: #030712;
   --bg-elevated: #0a0f1e;
   --bg-surface: rgba(10, 15, 30, 0.72);
-  --bg-glass: rgba(8, 12, 24, 0.60);
+  --bg-glass: rgba(6, 10, 20, 0.60);
   --bg-glass-hover: rgba(15, 23, 42, 0.80);
-  --bg-overlay: rgba(2, 6, 23, 0.88);
+  --bg-overlay: rgba(2, 6, 23, 0.92);
 
   /* Borders */
   --border-subtle: rgba(255, 255, 255, 0.06);
@@ -44,8 +44,8 @@
   --color-cable: #00ffaa;
   --color-volcano: #ff6b35;
 
-  /* Typography */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  /* Typography — Outfit + JetBrains pairing for premium dashboard feel */
+  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* Spacing Scale */
@@ -64,11 +64,11 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.30);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.40);
-  --shadow-lg: 0 8px 28px rgba(0,0,0,0.50);
-  --shadow-glow: 0 0 20px rgba(56, 189, 248, 0.15);
+  /* Shadows — tinted with background hue, never pure black */
+  --shadow-sm: 0 1px 2px rgba(3, 7, 18, 0.30);
+  --shadow-md: 0 4px 14px rgba(3, 7, 18, 0.45);
+  --shadow-lg: 0 8px 32px rgba(3, 7, 18, 0.55);
+  --shadow-glow: 0 0 20px rgba(56, 189, 248, 0.12);
 
   /* Z-Index Scale */
   --z-base: 1;

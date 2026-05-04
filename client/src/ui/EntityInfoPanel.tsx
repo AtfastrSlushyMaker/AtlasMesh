@@ -17,6 +17,8 @@ const TYPE_LABELS: Record<string, string> = {
   aircraft: 'Aircraft',
   ship: 'Maritime Vessel',
   satellite: 'Satellite',
+  starlink: 'Starlink',
+  iss: 'ISS',
   earthquake: 'Seismic Event',
   event: 'Environmental Event',
   weather: 'Weather Station',
@@ -26,12 +28,18 @@ const TYPE_LABELS: Record<string, string> = {
   volcano: 'Volcano',
   fireball: 'Meteor Fireball',
   airport: 'Airport',
+  powerplant: 'Power Plant',
+  windfarm: 'Wind Farm',
+  meteorite: 'Meteorite',
+  ixp: 'Internet Exchange',
 };
 
 const TYPE_COLORS: Record<string, string> = {
   aircraft: '#38bdf8',
   ship: '#facc15',
   satellite: '#a78bfa',
+  starlink: '#c084fc',
+  iss: '#22d3ee',
   earthquake: '#ef4444',
   event: '#f97316',
   weather: '#3b82f6',
@@ -41,6 +49,10 @@ const TYPE_COLORS: Record<string, string> = {
   volcano: '#ff6b35',
   fireball: '#f472b6',
   airport: '#94a3b8',
+  powerplant: '#fbbf24',
+  windfarm: '#34d399',
+  meteorite: '#fb923c',
+  ixp: '#818cf8',
 };
 
 function formatValue(key: string, value: any): string {
@@ -111,7 +123,7 @@ export const EntityInfoPanel = memo(function EntityInfoPanel({ entity, onClose }
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: 'var(--font-sans)',
         zIndex: 30,
         animation: 'slideInRight 280ms cubic-bezier(0.16,1,0.3,1)',
         boxShadow: '0 24px 64px rgba(0,0,0,0.50), 0 0 0 1px rgba(255,255,255,0.04)',

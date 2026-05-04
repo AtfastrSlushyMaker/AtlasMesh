@@ -447,10 +447,10 @@ function CesiumAppInner() {
   return (
     <div
       style={{
-        height: '100vh',
+        height: '100dvh',
         width: '100vw',
         position: 'relative',
-        backgroundColor: '#000',
+        backgroundColor: 'var(--bg-base)',
         overflow: 'hidden',
       }}
     >

@@ -64,9 +64,9 @@ export function useEntityLayer({
 
             clusterEntity.label.show = true;
             clusterEntity.label.text = String(count);
-            clusterEntity.label.font = 'bold 10px "Inter", sans-serif';
+            clusterEntity.label.font = 'bold 10px "Outfit", sans-serif';
             clusterEntity.label.fillColor = Cesium.Color.WHITE;
-            clusterEntity.label.outlineColor = Cesium.Color.fromCssColorString('#000000').withAlpha(0.7);
+            clusterEntity.label.outlineColor = Cesium.Color.fromCssColorString('#030712').withAlpha(0.85);
             clusterEntity.label.outlineWidth = 3;
             clusterEntity.label.style = Cesium.LabelStyle.FILL;
             clusterEntity.label.pixelOffset = new Cesium.Cartesian2(0, -22);

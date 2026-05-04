@@ -203,7 +203,7 @@ export const AppUI = memo(function AppUI({
         position: 'absolute',
         inset: 0,
         pointerEvents: 'none',
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: 'var(--font-sans)',
       }}
     >
       {/* ===== TOP HUD ===== */}

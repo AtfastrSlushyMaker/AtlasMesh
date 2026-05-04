@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
 import { useKeyboardShortcuts, Shortcut } from '../hooks/useKeyboardShortcuts';
 import { useToast } from '../ui/Toast';
 
@@ -30,7 +31,7 @@ export function KeyboardHelpModal({ shortcuts }: KeyboardHelpModalProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 9998,
+        zIndex: 'var(--z-modal)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -48,7 +49,7 @@ export function KeyboardHelpModal({ shortcuts }: KeyboardHelpModalProps) {
           background: 'rgba(10,15,30,0.95)',
           backdropFilter: 'blur(24px)',
           border: '1px solid rgba(255,255,255,0.10)',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.60)',
+          boxShadow: '0 24px 64px var(--shadow-lg)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -100,7 +101,7 @@ export function KeyboardHelpModal({ shortcuts }: KeyboardHelpModalProps) {
               e.currentTarget.style.color = 'var(--text-secondary)';
             }}
           >
-            ✕
+              <X size={16} />
           </button>
         </div>
 
@@ -165,7 +166,7 @@ function KeyBadge({ label }: { label: string }) {
         fontFamily: 'var(--font-mono)',
         fontWeight: 500,
         color: 'var(--text-primary)',
-        boxShadow: '0 2px 0 rgba(0,0,0,0.30)',
+          boxShadow: '0 2px 0 rgba(3,7,18,0.30)',
       }}
     >
       {label}

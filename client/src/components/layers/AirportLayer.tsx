@@ -21,7 +21,7 @@ export const AirportLayer = memo(function AirportLayer({ viewer, visible }: Laye
         },
         label: {
           text: e.metadata?.iata || e.metadata?.name || '',
-          font: '8px "Inter", sans-serif',
+          font: '8px "Outfit", sans-serif',
           fillColor: Cesium.Color.fromCssColorString('#94a3b8').withAlpha(0.9),
           style: Cesium.LabelStyle.FILL,
           pixelOffset: new Cesium.Cartesian2(0, 10),

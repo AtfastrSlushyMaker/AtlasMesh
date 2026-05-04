@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { AlertTriangle } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -30,7 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div
           style={{
-            height: '100vh',
+            height: '100dvh',
             width: '100vw',
             display: 'flex',
             alignItems: 'center',
@@ -47,6 +48,7 @@ export class ErrorBoundary extends Component<Props, State> {
               textAlign: 'center',
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border-default)',
+              borderRadius: 'var(--radius-lg)',
             }}
           >
             <div
@@ -62,9 +64,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 fontSize: 24,
                 margin: '0 auto 20px',
               }}
-            >
-              ⚠
-            </div>
+              >
+                <AlertTriangle size={24} />
+              </div>
             <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 600 }}>
               Something went wrong
             </h2>
@@ -74,9 +76,9 @@ export class ErrorBoundary extends Component<Props, State> {
             {this.state.error && (
               <pre
                 style={{
-                  background: 'rgba(0,0,0,0.3)',
+                  background: 'rgba(3,7,18,0.50)',
                   padding: 12,
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-md)',
                   fontSize: 11,
                   fontFamily: 'var(--font-mono)',
                   color: 'var(--text-muted)',
@@ -95,11 +97,12 @@ export class ErrorBoundary extends Component<Props, State> {
                 padding: '10px 24px',
                 background: 'var(--accent-primary)',
                 border: 'none',
-                color: '#000',
+                color: 'var(--bg-base)',
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: 'pointer',
-                borderRadius: 4,
+                borderRadius: 'var(--radius-sm)',
+                transition: 'all var(--transition-fast)',
               }}
             >
               Reload Application

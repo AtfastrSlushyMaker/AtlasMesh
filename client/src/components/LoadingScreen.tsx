@@ -10,7 +10,7 @@ export function LoadingScreen({ message = 'Initializing AtlasMesh...' }: Loading
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 10000,
+        zIndex: 'var(--z-modal)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',

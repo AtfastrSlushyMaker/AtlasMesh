@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { Check, X, AlertTriangle, Info } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -49,11 +50,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
-  const typeStyles: Record<ToastType, { border: string; icon: string; glow: string }> = {
-    success: { border: 'var(--accent-success)', icon: '✓', glow: 'rgba(34,197,94,0.2)' },
-    error: { border: 'var(--accent-danger)', icon: '✕', glow: 'rgba(239,68,68,0.2)' },
-    warning: { border: 'var(--accent-warning)', icon: '◆', glow: 'rgba(245,158,11,0.2)' },
-    info: { border: 'var(--accent-primary)', icon: 'ℹ', glow: 'rgba(56,189,248,0.2)' },
+  const typeStyles: Record<ToastType, { border: string; icon: React.ReactNode; glow: string }> = {
+    success: { border: 'var(--accent-success)', icon: <Check size={12} />, glow: 'rgba(34,197,94,0.12)' },
+    error: { border: 'var(--accent-danger)', icon: <X size={12} />, glow: 'rgba(239,68,68,0.12)' },
+    warning: { border: 'var(--accent-warning)', icon: <AlertTriangle size={12} />, glow: 'rgba(245,158,11,0.12)' },
+    info: { border: 'var(--accent-primary)', icon: <Info size={12} />, glow: 'rgba(56,189,248,0.12)' },
   };
 
   return (
@@ -62,7 +63,7 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
         position: 'fixed',
         top: 24,
         right: 24,
-        zIndex: 9999,
+        zIndex: 'var(--z-toast)',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
@@ -79,19 +80,17 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
             style={{
               pointerEvents: 'auto',
               animation: 'toast-enter 280ms cubic-bezier(0.16,1,0.3,1) forwards',
-              background: 'rgba(8,12,24,0.92)',
+              background: 'var(--bg-overlay)',
               backdropFilter: 'blur(20px)',
-              borderLeft: `3px solid ${style.border}`,
-              borderTop: '1px solid rgba(255,255,255,0.06)',
-              borderRight: '1px solid rgba(255,255,255,0.06)',
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
-              boxShadow: `0 8px 32px rgba(0,0,0,0.45), 0 0 0 1px ${style.glow}`,
+              border: '1px solid var(--border-subtle)',
+              boxShadow: `0 8px 32px rgba(2,6,23,0.60)`,
               padding: '14px 18px',
               display: 'flex',
               alignItems: 'center',
               gap: 12,
               cursor: 'pointer',
-              transition: 'opacity 200ms',
+              transition: 'opacity var(--transition-fast)',
+              borderRadius: 'var(--radius-md)',
             }}
             onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
@@ -100,14 +99,13 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
               style={{
                 width: 22,
                 height: 22,
-                borderRadius: '50%',
-                border: `1.5px solid ${style.border}`,
+                borderRadius: 'var(--radius-sm)',
+                background: 'rgba(255,255,255,0.04)',
+                border: `1px solid ${style.border}30`,
                 color: style.border,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 11,
-                fontWeight: 700,
                 flexShrink: 0,
               }}
             >
@@ -115,10 +113,10 @@ function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: 
             </span>
             <span
               style={{
-                fontSize: 13,
+                fontSize: 12.5,
                 color: 'var(--text-primary)',
                 lineHeight: 1.4,
-                fontWeight: 400,
+                fontWeight: 450,
               }}
             >
               {toast.message}

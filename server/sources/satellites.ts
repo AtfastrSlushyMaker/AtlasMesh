@@ -158,6 +158,9 @@ export function startSatellitesSource(
         const tle2 = lines[i + 2];
 
         if (tle1 && tle2 && tle1.startsWith('1 ') && tle2.startsWith('2 ')) {
+          // Exclude Starlink satellites — they are tracked separately via starlink.ts
+          if (/^STARLINK[- ]/i.test(name)) continue;
+
           const satId = tle2.substring(2, 7).trim();
           
           entities.push({
@@ -174,7 +177,7 @@ export function startSatellitesSource(
         }
       }
 
-      console.log(`[Satellites] Fetched ${entities.length} active satellites`);
+      console.log(`[Satellites] Fetched ${entities.length} active satellites (Starlink excluded)`);
       lastSucceeded = true;
       onEntities(entities);
     } catch (err: any) {
