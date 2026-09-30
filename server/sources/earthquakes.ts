@@ -18,7 +18,7 @@ export function startEarthquakesSource(
 
   async function fetchAndEmit() {
     try {
-      const res = await axios.get(url);
+      const res = await axios.get(url, { timeout: 20000 });
       const features = res.data.features || [];
       
       const entities: Entity[] = features.map((f: any) => {
@@ -31,12 +31,17 @@ export function startEarthquakesSource(
           position: {
             lon: coords[0],
             lat: coords[1],
-            alt: coords[2] ? -coords[2] * 1000 : 0 // depth in km to alt in meters (negative)
+            alt: 0, // drawn at the surface; depth is kept in metadata
           },
           timestamp: props.time,
           metadata: {
+            name: props.title,
             mag: props.mag,
+            depthKm: coords[2],
             place: props.place,
+            tsunami: props.tsunami === 1,
+            alert: props.alert || undefined,
+            felt: props.felt || undefined,
             url: props.url,
             title: props.title
           }

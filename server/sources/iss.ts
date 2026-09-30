@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { client as axios } from '../lib/http';
 import type { Entity } from '../../shared/entity';
 
 export type ISSPollOptions = {

@@ -1,5 +1,5 @@
-import axios from 'axios';
 import type { Entity } from '../../shared/entity';
+import { fetchCached } from '../lib/http';
 
 export type SubmarineCablePollOptions = {
   intervalMs?: number;
@@ -21,7 +21,7 @@ export function startSubmarineCableSource(
 
   async function fetchAndEmit() {
     try {
-      const res = await axios.get(url, { timeout: 30000 });
+      const res = { data: await fetchCached<any>(url, 7 * 24 * 60 * 60 * 1000, { timeout: 30000 }) };
       const features = res.data.features || [];
       
       const entities: Entity[] = [];

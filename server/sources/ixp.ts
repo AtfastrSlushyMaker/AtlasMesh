@@ -1,5 +1,5 @@
-import axios from 'axios';
 import type { Entity } from '../../shared/entity';
+import { fetchCached } from '../lib/http';
 
 export type IXPPollOptions = {
   intervalMs?: number;
@@ -14,10 +14,11 @@ export function startIXPSource(
   const intervalMs = opts?.intervalMs ?? 24 * 60 * 60 * 1000;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
+  let failed = false;
 
   async function fetchAndEmit() {
     try {
-      const res = await axios.get(PEERINGDB_URL, { timeout: 30000 });
+      const res = { data: await fetchCached<any>(PEERINGDB_URL, 24 * 60 * 60 * 1000, { timeout: 30000 }) };
       const data = res.data?.data;
 
       if (!Array.isArray(data) || data.length === 0) {
@@ -45,7 +46,8 @@ export function startIXPSource(
             country: ix.country || '',
             iataCode: ix.iata_code || '',
             netCount: ix.net_count || 0,
-            website: ix.website || '',
+            website: ix.website || undefined,
+            sourceUrl: `https://www.peeringdb.com/ix/${ix.id}`,
           },
         });
       }
@@ -56,9 +58,12 @@ export function startIXPSource(
       }
     } catch (err: any) {
       console.warn('[IXP] Error:', err?.message || err);
+      failed = true;
     } finally {
       if (!stopped) {
-        timer = setTimeout(fetchAndEmit, intervalMs);
+        // PeeringDB rate-limits anonymous bursts; retry failures after 10 minutes, not a day.
+        timer = setTimeout(fetchAndEmit, failed ? 10 * 60 * 1000 : intervalMs);
+        failed = false;
       }
     }
   }

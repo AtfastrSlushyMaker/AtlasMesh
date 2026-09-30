@@ -1,106 +1,105 @@
-import axios from 'axios';
+import { parse } from 'csv-parse/sync';
 import type { Entity } from '../../shared/entity';
+import { fetchCached, poll } from '../lib/http';
 
-export type PowerPlantPollOptions = {
-  intervalMs?: number;
-};
-
-const CSV_URL =
+/** WRI Global Power Plant Database v1.3 (CC BY 4.0). Also feeds the wind-farm layer. */
+export const GPPD_URL =
   'https://raw.githubusercontent.com/wri/global-power-plant-database/master/output_database/global_power_plant_database.csv';
 
-const FALLBACK_PLANTS: Array<{ lat: number; lon: number; name: string; fuel: string; capacity: number; country: string }> = [
-  { lat: 35.415, lon: 129.364, name: 'Shin-Kori', fuel: 'Nuclear', capacity: 4700, country: 'KOR' },
-  { lat: 50.348, lon: 30.545, name: 'Kyiv Hydro', fuel: 'Hydro', capacity: 700, country: 'UKR' },
-  { lat: 35.604, lon: -80.642, name: 'McGuire', fuel: 'Nuclear', capacity: 2400, country: 'USA' },
-  { lat: -33.324, lon: 115.639, name: 'Collie', fuel: 'Coal', capacity: 340, country: 'AUS' },
-  { lat: 51.054, lon: 13.735, name: 'Dresden-Mitte', fuel: 'Gas', capacity: 280, country: 'DEU' },
-  { lat: 48.955, lon: 2.146, name: 'Porcheville', fuel: 'Oil', capacity: 450, country: 'FRA' },
-  { lat: 35.650, lon: 139.750, name: 'Shinagawa', fuel: 'Gas', capacity: 870, country: 'JPN' },
-  { lat: -25.465, lon: -49.300, name: 'Governador Bento Munhoz', fuel: 'Hydro', capacity: 1676, country: 'BRA' },
-  { lat: 29.327, lon: 111.0, name: 'Three Gorges', fuel: 'Hydro', capacity: 22500, country: 'CHN' },
-  { lat: 28.913, lon: 77.102, name: 'Rajiv Gandhi Solar Park', fuel: 'Solar', capacity: 648, country: 'IND' },
-  { lat: 30.900, lon: 29.550, name: 'El-Dabaa', fuel: 'Nuclear', capacity: 4800, country: 'EGY' },
-  { lat: -23.856, lon: 18.380, name: 'Kokerboom Wind', fuel: 'Wind', capacity: 100, country: 'NAM' },
-];
+const DAY = 24 * 60 * 60 * 1000;
 
-export function startPowerPlantSource(
-  onEntities: (entities: Entity[]) => void,
-  opts?: PowerPlantPollOptions
-) {
-  const intervalMs = opts?.intervalMs ?? 24 * 60 * 60 * 1000;
-  let stopped = false;
-  let timer: NodeJS.Timeout | null = null;
+interface Plant {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  fuel: string;
+  capacityMw: number;
+  country: string;
+  owner?: string;
+  commissioningYear?: number;
+}
 
-  async function fetchAndEmit() {
-    try {
-      const res = await axios.get(CSV_URL, { timeout: 30000, responseType: 'text' });
-      const lines = (res.data as string).split('\n');
-      if (lines.length < 2) throw new Error('CSV too short');
+/** Parse once per download; both layers share the result. */
+let cached: { at: number; plants: Plant[] } | null = null;
 
-      const headers = lines[0].split(',').map((h: string) => h.trim());
-      const idxLat = headers.indexOf('latitude');
-      const idxLon = headers.indexOf('longitude');
-      const idxName = headers.indexOf('name');
-      const idxFuel = headers.indexOf('primary_fuel');
-      const idxCap = headers.indexOf('capacity_mw');
-      const idxCountry = headers.indexOf('country_long');
-
-      if (idxLat === -1 || idxLon === -1) throw new Error('Missing lat/lon columns');
-
-      const entities: Entity[] = [];
-      let skipped = 0;
-
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',');
-        if (cols.length < Math.max(idxLat, idxLon) + 1) { skipped++; continue; }
-
-        const lat = parseFloat(cols[idxLat]);
-        const lon = parseFloat(cols[idxLon]);
-        if (isNaN(lat) || isNaN(lon)) { skipped++; continue; }
-
-        const name = idxName !== -1 ? cols[idxName]?.replace(/^"|"$/g, '') : 'Unknown';
-        const fuel = idxFuel !== -1 ? cols[idxFuel]?.replace(/^"|"$/g, '') : '';
-        const capMw = idxCap !== -1 ? parseFloat(cols[idxCap]) : 0;
-        const country = idxCountry !== -1 ? cols[idxCountry]?.replace(/^"|"$/g, '') : '';
-
-        entities.push({
-          id: `powerplant:${i}:${name}`,
-          type: 'powerplant',
-          position: { lat, lon, alt: 0 },
-          timestamp: Date.now(),
-          metadata: { name, primaryFuel: fuel, capacityMw: Number.isFinite(capMw) ? capMw : 0, country },
-        });
-      }
-
-      const sorted = entities.sort((a, b) => (b.metadata.capacityMw || 0) - (a.metadata.capacityMw || 0));
-      const capped = sorted.slice(0, 5000);
-      console.log(`[PowerPlants] Fetched ${capped.length} plants (from ${entities.length} total, skipped ${skipped} rows)`);
-      if (capped.length > 0) {
-        onEntities(capped);
-      } else {
-        throw new Error('No valid plants parsed');
-      }
-    } catch (err: any) {
-      console.warn('[PowerPlants] Error:', err?.message || err, '- using fallback');
-      const fallback = FALLBACK_PLANTS.map((p, i) => ({
-        id: `powerplant:fallback:${i}`,
-        type: 'powerplant' as const,
-        position: { lat: p.lat, lon: p.lon, alt: 0 },
-        timestamp: Date.now(),
-        metadata: { name: p.name, primaryFuel: p.fuel, capacityMw: p.capacity, country: p.country },
-      }));
-      onEntities(fallback);
-    } finally {
-      if (!stopped) {
-        timer = setTimeout(fetchAndEmit, intervalMs);
-      }
-    }
+export async function loadPlants(): Promise<Plant[]> {
+  if (cached && Date.now() - cached.at < DAY) return cached.plants;
+  const csv = await fetchCached<string>(GPPD_URL, 7 * DAY, { responseType: 'text', timeout: 60000 });
+  const rows: any[] = parse(csv, { columns: true, skip_empty_lines: true, relax_column_count: true });
+  const plants: Plant[] = [];
+  for (const r of rows) {
+    const lat = parseFloat(r.latitude);
+    const lon = parseFloat(r.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const cap = parseFloat(r.capacity_mw);
+    const year = parseFloat(r.commissioning_year);
+    plants.push({
+      id: r.gppd_idnr || `${r.country}:${r.name}`,
+      name: r.name,
+      lat,
+      lon,
+      fuel: r.primary_fuel,
+      capacityMw: Number.isFinite(cap) ? cap : 0,
+      country: r.country_long,
+      owner: r.owner || undefined,
+      commissioningYear: Number.isFinite(year) ? Math.round(year) : undefined,
+    });
   }
+  cached = { at: Date.now(), plants };
+  return plants;
+}
 
-  fetchAndEmit();
-
-  return () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
+function toEntity(p: Plant, type: 'powerplant' | 'windfarm'): Entity {
+  return {
+    id: `${type}:${p.id}`,
+    type,
+    position: { lat: p.lat, lon: p.lon, alt: 0 },
+    timestamp: Date.now(),
+    metadata: {
+      name: p.name,
+      primaryFuel: p.fuel,
+      capacityMw: p.capacityMw,
+      country: p.country,
+      owner: p.owner,
+      commissioningYear: p.commissioningYear,
+      sourceUrl: 'https://datasets.wri.org/dataset/globalpowerplantdatabase',
+    },
   };
+}
+
+export function startPowerPlantSource(onEntities: (entities: Entity[]) => void) {
+  return poll(async () => {
+    try {
+      const plants = await loadPlants();
+      const out = plants
+        .filter((p) => p.fuel !== 'Wind')
+        .sort((a, b) => b.capacityMw - a.capacityMw)
+        .slice(0, 6000)
+        .map((p) => toEntity(p, 'powerplant'));
+      console.log(`[PowerPlants] ${out.length} plants`);
+      onEntities(out);
+    } catch (err: any) {
+      console.warn('[PowerPlants] Error:', err?.message || err);
+      return 10 * 60 * 1000;
+    }
+  }, DAY);
+}
+
+export function startWindFarmSource(onEntities: (entities: Entity[]) => void) {
+  return poll(async () => {
+    try {
+      const plants = await loadPlants();
+      const out = plants
+        .filter((p) => p.fuel === 'Wind')
+        .sort((a, b) => b.capacityMw - a.capacityMw)
+        .slice(0, 4000)
+        .map((p) => toEntity(p, 'windfarm'));
+      console.log(`[WindFarms] ${out.length} wind farms`);
+      onEntities(out);
+    } catch (err: any) {
+      console.warn('[WindFarms] Error:', err?.message || err);
+      return 10 * 60 * 1000;
+    }
+  }, DAY);
 }

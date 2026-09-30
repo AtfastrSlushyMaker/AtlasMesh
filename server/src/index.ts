@@ -1,12 +1,15 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { startAircraftSource } from '../sources/aircraft';
-import { store } from '../services/store';
+import type { Entity, EntityType } from '../../shared/entity';
+import { store, Retention } from '../services/store';
+import { sources, SourceDef } from '../services/sources';
+import { startAircraftSource, isAircraftAuthenticated } from '../sources/aircraft';
 import { startAISSource } from '../sources/ais';
-import { startSatellitesSource } from '../sources/satellites';
+import { startSatellitesSource, startStarlinkSource } from '../sources/tle';
 import { startLaunchesSource } from '../sources/launches';
 import { startEventsSource } from '../sources/events';
 import { startEarthquakesSource } from '../sources/earthquakes';
@@ -15,295 +18,315 @@ import { startWildfiresSource } from '../sources/wildfires';
 import { startSubmarineCableSource } from '../sources/cables';
 import { startVolcanoSource } from '../sources/volcanoes';
 import { startFireballsSource } from '../sources/fireballs';
-import { startPowerPlantSource } from '../sources/powerplants';
+import { startPowerPlantSource, startWindFarmSource } from '../sources/powerplants';
 import { startMeteoriteSource } from '../sources/meteorites';
-import { startWindFarmSource } from '../sources/windfarms';
 import { startIXPSource } from '../sources/ixp';
-import { startStarlinkSource } from '../sources/starlink';
 import { startISSSource } from '../sources/iss';
 import { startAirportSource } from '../sources/airports';
+import { startCameraSource } from '../sources/cameras';
+import { startDisasterSource } from '../sources/disasters';
+import { startBuoySource } from '../sources/buoys';
 
-import axios from 'axios';
-import https from 'https';
-
-// Force IPv4 for all Axios requests to prevent IPv6 timeouts (ENETUNREACH)
-axios.defaults.httpAgent = new http.Agent({ family: 4 });
-axios.defaults.httpsAgent = new https.Agent({ family: 4 });
+const VERSION = '2.1.0';
+const MIN = 60 * 1000;
+const HOUR = 60 * MIN;
 
 const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, maxPayload: 64 * 1024 });
 
-// ===== Metrics & State =====
+// ===== Metrics =====
 let totalConnections = 0;
-let activeConnections = 0;
-const connectionStartTimes = new Map<WebSocket, number>();
 let messagesSent = 0;
 let messagesReceived = 0;
-let startTime = Date.now();
 
-// ===== Request Logging Middleware =====
+// ===== Middleware =====
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
-    const duration = Date.now() - start;
-    console.log(`[HTTP] ${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
+    if (req.path.startsWith('/api') || req.path === '/health') {
+      console.log(`[HTTP] ${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
+    }
   });
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '256kb' }));
 
-// ===== CORS Headers =====
-app.use((_req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // The client is served from the same origin in production. In development
+  // Vite proxies /api, so CORS is only needed for ad-hoc tooling.
+  const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const origin = req.headers.origin;
+  if (origin && (allowed.includes(origin) || process.env.NODE_ENV !== 'production')) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 
-// ===== Production: serve client build =====
-const clientDist = path.resolve(__dirname, '..', '..', '..', '..', 'client', 'dist');
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(clientDist));
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
-  });
-  console.log(`[Server] Serving client from ${clientDist}`);
-}
-
-// ===== Health Check =====
+// ===== Health & metrics =====
 app.get('/health', (_req, res) => {
   res.json({
     status: 'ok',
-    version: '2.0.0',
-    entities: store.getAll().length,
+    version: VERSION,
+    entities: store.count(),
     uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    connections: { total: totalConnections, active: activeConnections },
+    connections: { total: totalConnections, active: wss.clients.size },
     timestamp: new Date().toISOString(),
   });
 });
 
-// ===== Metrics Endpoint =====
 app.get('/metrics', (_req, res) => {
-  const uptime = (Date.now() - startTime) / 1000;
   res.json({
-    uptime,
-    entities: store.getAll().length,
-    connections: { total: totalConnections, active: activeConnections },
+    uptime: process.uptime(),
+    entities: store.count(),
+    connections: { total: totalConnections, active: wss.clients.size },
     messages: { sent: messagesSent, received: messagesReceived },
     memory: process.memoryUsage(),
-    cpu: process.cpuUsage(),
-    pid: process.pid,
     nodeVersion: process.version,
-    platform: process.platform,
   });
 });
 
-// ===== Entities API =====
-app.get('/api/entities', (_req, res) => {
-  const entities = store.getAll();
-  res.json({ count: entities.length, entities });
+// ===== Entity API =====
+app.get('/api/sources', (_req, res) => res.json({ sources: sources.list() }));
+
+app.get('/api/entities', (req, res) => {
+  const type = req.query.type as EntityType | undefined;
+  const limit = Math.min(Number(req.query.limit) || 1000, 20000);
+  const list = type ? store.getByType(type) : store.getAll();
+  res.json({ count: list.length, entities: list.slice(0, limit) });
+});
+
+app.get('/api/entities/type/:type', (req, res) => {
+  const list = store.getByType(req.params.type as EntityType);
+  res.json({ count: list.length, entities: list });
 });
 
 app.get('/api/entities/:id', (req, res) => {
   const entity = store.getById(req.params.id);
-  if (!entity) {
-    res.status(404).json({ error: 'Entity not found' });
-    return;
-  }
+  if (!entity) return res.status(404).json({ error: `No entity with id "${req.params.id}"` });
   res.json(entity);
 });
 
-app.get('/api/entities/type/:type', (req, res) => {
-  const entities = store.getAll().filter(e => e.type === req.params.type);
-  res.json({ count: entities.length, entities });
+app.get('/api/near', (req, res) => {
+  const lat = Number(req.query.lat);
+  const lon = Number(req.query.lon);
+  const radius = Math.min(Number(req.query.radiusKm) || 50, 2000);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return res.status(400).json({ error: 'lat and lon query parameters are required numbers' });
+  }
+  const types = req.query.types ? String(req.query.types).split(',') as EntityType[] : undefined;
+  const results = store.near(lat, lon, radius, types, 100).map(({ entity, distanceKm }) => ({
+    id: entity.id,
+    type: entity.type,
+    name: entity.metadata?.name ?? entity.id,
+    position: entity.position,
+    distanceKm: +distanceKm.toFixed(2),
+  }));
+  res.json({ count: results.length, results });
 });
 
-// ===== WebSocket Connection Handling =====
-const PING_INTERVAL = 30000; // 30s
-const PONG_TIMEOUT = 10000; // 10s
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Unknown API route' }));
 
-function heartbeat(this: WebSocket & { isAlive?: boolean }) {
-  this.isAlive = true;
+// ===== Production: serve client build (registered after API routes) =====
+const clientDist = path.resolve(__dirname, '..', '..', '..', '..', 'client', 'dist');
+if (process.env.NODE_ENV === 'production' && fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist, { maxAge: '1h', index: false }));
+  app.get('*', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
+  console.log(`[Server] Serving client from ${clientDist}`);
 }
 
-wss.on('connection', (ws: WebSocket & { isAlive?: boolean }) => {
-  totalConnections++;
-  activeConnections++;
-  connectionStartTimes.set(ws, Date.now());
-  ws.isAlive = true;
-  ws.on('pong', heartbeat);
+// ===== WebSocket =====
+type Client = WebSocket & { isAlive?: boolean; layers?: Set<EntityType> };
 
-  console.log(`[WS] Client connected (active: ${activeConnections}, total: ${totalConnections})`);
+function send(ws: WebSocket, msg: unknown) {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
   messagesSent++;
-  ws.send(JSON.stringify({ type: 'hello', message: 'AtlasMesh WebSocket v2.0', timestamp: Date.now() }));
+}
 
-  // Send initial snapshot
-  const allEntities = store.getAll();
-  if (allEntities.length > 0) {
-    const snapshot = JSON.stringify({
-      type: 'update',
-      added: allEntities,
-      updated: [],
-      removed: []
-    });
-    ws.send(snapshot);
-    messagesSent++;
-    console.log(`[WS] Sent initial snapshot: ${allEntities.length} entities`);
+const SNAPSHOT_CHUNK = 4000;
+
+function sendSnapshot(ws: Client, types: EntityType[]) {
+  const all: Entity[] = [];
+  for (const t of types) all.push(...store.getByType(t));
+  if (all.length === 0) {
+    send(ws, { type: 'update', added: [], updated: [], removed: [], snapshot: types, timestamp: Date.now() });
+    return;
   }
+  for (let i = 0; i < all.length; i += SNAPSHOT_CHUNK) {
+    send(ws, {
+      type: 'update',
+      added: all.slice(i, i + SNAPSHOT_CHUNK),
+      updated: [],
+      removed: [],
+      snapshot: i === 0 ? types : undefined,
+      timestamp: Date.now(),
+    });
+  }
+}
+
+wss.on('connection', (ws: Client) => {
+  totalConnections++;
+  ws.isAlive = true;
+  ws.layers = new Set();
+  ws.on('pong', () => { ws.isAlive = true; });
+
+  send(ws, { type: 'hello', version: VERSION, timestamp: Date.now() });
+  send(ws, { type: 'sources', sources: sources.list() });
 
   ws.on('message', (data) => {
     messagesReceived++;
+    let msg: any;
     try {
-      const msg = JSON.parse(data.toString());
-      if (msg.type === 'ping') {
-        ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
-        messagesSent++;
-      }
+      msg = JSON.parse(data.toString());
     } catch {
-      // Ignore invalid messages
+      return;
+    }
+    if (msg?.type === 'ping') {
+      send(ws, { type: 'pong', timestamp: Date.now() });
+    } else if (msg?.type === 'subscribe' && Array.isArray(msg.layers)) {
+      const next = new Set<EntityType>(msg.layers.filter((l: unknown) => typeof l === 'string').slice(0, 64));
+      const fresh = [...next].filter((t) => !ws.layers!.has(t));
+      ws.layers = next;
+      if (fresh.length) sendSnapshot(ws, fresh);
     }
   });
 
-  ws.on('close', () => {
-    activeConnections--;
-    connectionStartTimes.delete(ws);
-    console.log(`[WS] Client disconnected (active: ${activeConnections})`);
-  });
-
-  ws.on('error', (err) => {
-    console.warn('[WS] Client error:', err.message);
-  });
+  ws.on('error', (err) => console.warn('[WS] Client error:', err.message));
 });
 
-// Ping/Pong health check interval
 const pingInterval = setInterval(() => {
-  wss.clients.forEach((ws: WebSocket & { isAlive?: boolean }) => {
-    if (!ws.isAlive) {
-      console.log('[WS] Terminating stale connection');
-      return ws.terminate();
-    }
-    ws.isAlive = false;
-    ws.ping();
+  wss.clients.forEach((c: Client) => {
+    if (!c.isAlive) return c.terminate();
+    c.isAlive = false;
+    c.ping();
   });
-}, PING_INTERVAL);
+}, 30000);
 
-// ===== Broadcast Function =====
-function broadcastDiff(diff: { added: any[]; updated: any[]; removed: any[] }) {
-  if (diff.added.length === 0 && diff.updated.length === 0 && diff.removed.length === 0) return;
-
-  const payload = JSON.stringify({
-    type: 'update',
-    added: diff.added,
-    updated: diff.updated,
-    removed: diff.removed,
-    timestamp: Date.now(),
+function broadcastDiff(type: EntityType | null, diff: { added: Entity[]; updated: Entity[]; removed: string[] }) {
+  if (!diff.added.length && !diff.updated.length && !diff.removed.length) return;
+  const payload = JSON.stringify({ type: 'update', ...diff, timestamp: Date.now() });
+  wss.clients.forEach((c: Client) => {
+    if (type && !c.layers?.has(type)) return;
+    send(c, payload);
   });
-
-  let sentCount = 0;
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
-      sentCount++;
-    }
-  });
-  messagesSent += sentCount;
 }
 
-// ===== Source Handler Factory =====
-function createSourceHandler(type: string) {
-  return (entities: any[]) => {
-    try {
-      const diff = store.processForType(type as any, entities);
-      if (diff.added.length || diff.updated.length || diff.removed.length) {
-        broadcastDiff(diff);
-      }
-    } catch (err: any) {
-      console.warn(`[Store] Error processing ${type}:`, err?.message);
-    }
-  };
+// Periodically push source health so the UI can show feed status.
+const sourcesInterval = setInterval(() => {
+  const payload = JSON.stringify({ type: 'sources', sources: sources.list() });
+  wss.clients.forEach((c) => send(c, payload));
+}, 15000);
+
+const sweepInterval = setInterval(() => {
+  const diff = store.sweep();
+  if (diff.removed.length) broadcastDiff(null, diff);
+}, MIN);
+
+// ===== Data sources =====
+interface SourceEntry extends SourceDef {
+  start: (onEntities: (e: Entity[]) => void) => unknown;
+  retention?: Retention;
 }
 
-// ===== Start All Data Sources =====
-const SOURCES = [
-  { start: startAircraftSource, type: 'aircraft', label: 'Aircraft (OpenSky)' },
-  { start: startAISSource, type: 'ship', label: 'Ships (AISStream)' },
-  { start: startSatellitesSource, type: 'satellite', label: 'Satellites (Celestrak)' },
-  { start: startLaunchesSource, type: 'launch', label: 'Launches (Space Devs)' },
-  { start: startEventsSource, type: 'event', label: 'Events (EONET)' },
-  { start: startEarthquakesSource, type: 'earthquake', label: 'Earthquakes (USGS)' },
-  { start: startWeatherSource, type: 'weather', label: 'Weather (Open-Meteo)' },
-  { start: startWildfiresSource, type: 'wildfire', label: 'Wildfires (NASA FIRMS)' },
-  { start: startVolcanoSource, type: 'volcano', label: 'Volcanoes (USGS)' },
-  { start: startSubmarineCableSource, type: 'cable', label: 'Cables (TeleGeography)' },
-  { start: startFireballsSource, type: 'fireball', label: 'Fireballs (NASA JPL)' },
-  { start: startPowerPlantSource, type: 'powerplant', label: 'Power Plants (WRI)' },
-  { start: startMeteoriteSource, type: 'meteorite', label: 'Meteorites (NASA)' },
-  { start: startWindFarmSource, type: 'windfarm', label: 'Wind Farms (Open)' },
-  { start: startIXPSource, type: 'ixp', label: 'Internet Exchanges (PeeringDB)' },
-  { start: startStarlinkSource, type: 'starlink', label: 'Starlink (Celestrak)' },
-  { start: startISSSource, type: 'iss', label: 'ISS (wheretheiss.at)' },
-  { start: startAirportSource, type: 'airport', label: 'Airports (OpenFlights)' },
+const SOURCES: SourceEntry[] = [
+  { id: 'aircraft', type: 'aircraft', label: 'Aircraft', provider: 'OpenSky Network', url: 'https://opensky-network.org', refreshMs: isAircraftAuthenticated() ? MIN : 15 * MIN, start: startAircraftSource, retention: { mode: 'snapshot', graceMs: 20 * MIN },
+    note: isAircraftAuthenticated() ? undefined : 'Anonymous access refreshes about every 15 minutes. Add OpenSky API credentials for 1-minute updates.' },
+  { id: 'ship', type: 'ship', label: 'Ships', provider: 'AISStream', url: 'https://aisstream.io', refreshMs: MIN, requires: ['AISSTREAM_TOKEN'], start: startAISSource, retention: { mode: 'stream', ttlMs: 30 * MIN } },
+  { id: 'satellite', type: 'satellite', label: 'Satellites', provider: 'Celestrak', url: 'https://celestrak.org', refreshMs: 3 * HOUR, start: startSatellitesSource },
+  { id: 'starlink', type: 'starlink', label: 'Starlink', provider: 'Celestrak', url: 'https://celestrak.org', refreshMs: 3 * HOUR, start: startStarlinkSource },
+  { id: 'iss', type: 'iss', label: 'ISS', provider: 'wheretheiss.at', url: 'https://wheretheiss.at', refreshMs: 5000, start: startISSSource },
+  { id: 'launch', type: 'launch', label: 'Launches', provider: 'The Space Devs', url: 'https://thespacedevs.com', refreshMs: 20 * MIN, start: startLaunchesSource },
+  { id: 'earthquake', type: 'earthquake', label: 'Earthquakes', provider: 'USGS', url: 'https://earthquake.usgs.gov', refreshMs: MIN, start: startEarthquakesSource },
+  { id: 'disaster', type: 'disaster', label: 'Disaster alerts', provider: 'GDACS', url: 'https://www.gdacs.org', refreshMs: 10 * MIN, start: startDisasterSource },
+  { id: 'event', type: 'event', label: 'Natural events', provider: 'NASA EONET', url: 'https://eonet.gsfc.nasa.gov', refreshMs: 5 * MIN, start: startEventsSource },
+  { id: 'wildfire', type: 'wildfire', label: 'Wildfires', provider: 'NASA FIRMS', url: 'https://firms.modaps.eosdis.nasa.gov', refreshMs: HOUR, start: startWildfiresSource },
+  { id: 'volcano', type: 'volcano', label: 'Volcanoes', provider: 'USGS / Smithsonian GVP', url: 'https://volcanoes.usgs.gov', refreshMs: 6 * HOUR, start: startVolcanoSource },
+  { id: 'weather', type: 'weather', label: 'City weather', provider: 'Open-Meteo', url: 'https://open-meteo.com', refreshMs: 20 * MIN, start: startWeatherSource },
+  { id: 'buoy', type: 'buoy', label: 'Ocean buoys', provider: 'NOAA NDBC', url: 'https://www.ndbc.noaa.gov', refreshMs: 30 * MIN, start: startBuoySource },
+  { id: 'fireball', type: 'fireball', label: 'Fireballs', provider: 'NASA JPL CNEOS', url: 'https://cneos.jpl.nasa.gov/fireballs/', refreshMs: HOUR, start: startFireballsSource },
+  { id: 'camera', type: 'camera', label: 'Public cameras', provider: 'TfL · Caltrans · Fintraffic', url: 'https://api.tfl.gov.uk', refreshMs: 30 * MIN, start: startCameraSource },
+  { id: 'cable', type: 'cable', label: 'Subsea cables', provider: 'TeleGeography', url: 'https://www.submarinecablemap.com', refreshMs: 24 * HOUR, start: startSubmarineCableSource },
+  { id: 'ixp', type: 'ixp', label: 'Internet exchanges', provider: 'PeeringDB', url: 'https://www.peeringdb.com', refreshMs: 24 * HOUR, start: startIXPSource },
+  { id: 'airport', type: 'airport', label: 'Airports', provider: 'OpenFlights', url: 'https://openflights.org', refreshMs: 24 * HOUR, start: startAirportSource },
+  { id: 'powerplant', type: 'powerplant', label: 'Power plants', provider: 'WRI GPPD', url: 'https://datasets.wri.org/dataset/globalpowerplantdatabase', refreshMs: 24 * HOUR, start: startPowerPlantSource },
+  { id: 'windfarm', type: 'windfarm', label: 'Wind farms', provider: 'WRI GPPD', url: 'https://datasets.wri.org/dataset/globalpowerplantdatabase', refreshMs: 24 * HOUR, start: startWindFarmSource },
+  { id: 'meteorite', type: 'meteorite', label: 'Meteorite landings', provider: 'Meteoritical Society / NASA', url: 'https://www.lpi.usra.edu/meteor/', refreshMs: 24 * HOUR, start: startMeteoriteSource },
 ];
 
-console.log('\n🌍 AtlasMesh Server v2.0\n');
+// Sources log failures as "[Tag] Error: …". Route those to the registry so the
+// feed panel can say why a layer is empty, without threading callbacks everywhere.
+const LOG_TAGS: Record<string, string> = {
+  aircraft: 'aircraft', satellites: 'satellite', starlink: 'starlink', iss: 'iss', launches: 'launch',
+  earthquakes: 'earthquake', disasters: 'disaster', events: 'event', wildfires: 'wildfire', volcanoes: 'volcano',
+  weather: 'weather', buoys: 'buoy', fireballs: 'fireball', cameras: 'camera', 'submarine cables': 'cable', cables: 'cable',
+  ixp: 'ixp', airports: 'airport', powerplants: 'powerplant', windfarms: 'windfarm', meteorites: 'meteorite',
+};
+const originalWarn = console.warn.bind(console);
+console.warn = (...args: any[]) => {
+  originalWarn(...args);
+  const m = typeof args[0] === 'string' ? args[0].match(/^\[([^\]]+)\]\s*(.*)/) : null;
+  const id = m && LOG_TAGS[m[1].toLowerCase()];
+  if (id) sources.reportError(id, [m![2], ...args.slice(1)].join(' ').replace(/^Error:\s*/, '').slice(0, 200));
+};
 
-for (const source of SOURCES) {
+console.log(`\nAtlasMesh server ${VERSION}\n`);
+
+for (const s of SOURCES) {
+  const missing = sources.register(s);
+  if (s.retention) store.setRetention(s.type, s.retention);
+  if (missing.length) {
+    console.log(`  - ${s.label}: disabled (set ${missing.join(', ')})`);
+    continue;
+  }
   try {
-    source.start(createSourceHandler(source.type));
-    console.log(`  ✓ ${source.label}`);
+    s.start((entities) => {
+      try {
+        const diff = store.processForType(s.type, entities);
+        sources.reportData(s.id, store.count(s.type));
+        broadcastDiff(s.type, diff);
+      } catch (err: any) {
+        sources.reportError(s.id, err?.message || String(err));
+        console.warn(`[Store] Error processing ${s.type}:`, err?.message);
+      }
+    });
+    console.log(`  + ${s.label} (${s.provider})`);
   } catch (err: any) {
-    console.warn(`  ✗ ${source.label} failed:`, err?.message || err);
+    sources.reportError(s.id, err?.message || String(err));
+    console.warn(`  ! ${s.label} failed to start:`, err?.message || err);
   }
 }
 
-// ===== Graceful Shutdown =====
+// ===== Graceful shutdown =====
 function shutdown(signal: string) {
-  console.log(`\n[Server] Received ${signal}. Shutting down gracefully...`);
-
+  console.log(`\n[Server] ${signal} received, shutting down`);
   clearInterval(pingInterval);
-
-  // Close all WebSocket connections
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.close(1001, 'Server shutting down');
-    }
-  });
-
-  // Stop accepting new connections
-  wss.close(() => {
-    console.log('[WS] All connections closed');
-  });
-
-  server.close(() => {
-    console.log('[HTTP] Server closed');
-    process.exit(0);
-  });
-
-  // Force exit after 10s
-  setTimeout(() => {
-    console.error('[Server] Forced exit after timeout');
-    process.exit(1);
-  }, 10000);
+  clearInterval(sourcesInterval);
+  clearInterval(sweepInterval);
+  wss.clients.forEach((c) => c.close(1001, 'Server shutting down'));
+  wss.close();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 10000).unref();
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('uncaughtException', (err) => {
+  // Log and keep serving: one bad upstream payload should not take the globe down.
   console.error('[Fatal] Uncaught exception:', err);
-  shutdown('uncaughtException');
 });
-process.on('unhandledRejection', (reason) => {
-  console.error('[Fatal] Unhandled rejection:', reason);
-});
+process.on('unhandledRejection', (reason) => console.error('[Fatal] Unhandled rejection:', reason));
 
-// ===== Start Server =====
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 server.listen(PORT, () => {
-  console.log(`\n🚀 Server listening on http://localhost:${PORT}`);
-  console.log(`   Health:  http://localhost:${PORT}/health`);
-  console.log(`   Metrics: http://localhost:${PORT}/metrics`);
-  console.log(`   WS:      ws://localhost:${PORT}\n`);
+  console.log(`\nListening on http://localhost:${PORT}  (ws on same port)\n`);
 });

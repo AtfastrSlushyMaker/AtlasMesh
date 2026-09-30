@@ -1,167 +1,89 @@
-import axios from 'axios';
 import type { Entity } from '../../shared/entity';
+import { client, poll } from '../lib/http';
 
-export type AircraftPollOptions = {
-  intervalMs?: number;
-  url?: string;
-};
+/**
+ * OpenSky Network state vectors.
+ *
+ * Credit budget (2025+ API): anonymous ≈ 400 credits/day, a full-world
+ * `/states/all` costs 4 → roughly one call every 15 minutes. Registered API
+ * clients (OAuth2 client-credentials) get 4000/day → about once a minute.
+ * Legacy basic-auth accounts are still honoured.
+ */
+const STATES_URL = 'https://opensky-network.org/api/states/all';
+const TOKEN_URL = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token';
 
-// Demo aircraft at major airports as fallback
-const DEMO_AIRCRAFT: Entity[] = [
-  {
-    id: 'aircraft:demo:ba001',
-    type: 'aircraft',
-    position: { lat: 51.47, lon: -0.46, alt: 0 },
-    timestamp: Date.now(),
-    metadata: { callsign: 'BA001', icao24: 'demo001', origin_country: 'United Kingdom', name: 'London Heathrow' },
-  },
-  {
-    id: 'aircraft:demo:dl101',
-    type: 'aircraft',
-    position: { lat: 40.64, lon: -73.78, alt: 5000 },
-    timestamp: Date.now(),
-    metadata: { callsign: 'DL101', icao24: 'demo002', origin_country: 'United States', name: 'JFK Approach' },
-  },
-  {
-    id: 'aircraft:demo:af022',
-    type: 'aircraft',
-    position: { lat: 48.86, lon: 2.35, alt: 30000 },
-    timestamp: Date.now(),
-    metadata: { callsign: 'AF022', icao24: 'demo003', origin_country: 'France', name: 'Paris Overflight' },
-  },
-  {
-    id: 'aircraft:demo:lh405',
-    type: 'aircraft',
-    position: { lat: 50.04, lon: 8.57, alt: 12000 },
-    timestamp: Date.now(),
-    metadata: { callsign: 'LH405', icao24: 'demo004', origin_country: 'Germany', name: 'Frankfurt Approach' },
-  },
-  {
-    id: 'aircraft:demo:jl061',
-    type: 'aircraft',
-    position: { lat: 35.55, lon: 139.78, alt: 25000 },
-    timestamp: Date.now(),
-    metadata: { callsign: 'JL061', icao24: 'demo005', origin_country: 'Japan', name: 'Tokyo Haneda' },
-  },
-];
+let token: { value: string; expiresAt: number } | null = null;
 
-export function startAircraftSource(
-  onEntities: (entities: Entity[]) => void,
-  opts?: AircraftPollOptions
-) {
-  const intervalMs = opts?.intervalMs ?? 15000;
-  const url = opts?.url ?? 'https://opensky-network.org/api/states/all';
-
-  let stopped = false;
-  let timer: NodeJS.Timeout | null = null;
-  let dynamicInterval = intervalMs;
-  let consecutiveErrors = 0;
-  let usedFallback = false;
-
-  function wait(ms: number) {
-    return new Promise((res) => setTimeout(res, ms));
-  }
-
-  async function fetchWithRetry(input: string, opts?: { retries?: number }) {
-    const retries = opts?.retries ?? 2;
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        const authOptions: any = { timeout: 10000 };
-        if (process.env.OPENSKY_USERNAME && process.env.OPENSKY_PASSWORD) {
-          authOptions.auth = {
-            username: process.env.OPENSKY_USERNAME,
-            password: process.env.OPENSKY_PASSWORD
-          };
-        }
-        const res = await axios.get(input, authOptions);
-        consecutiveErrors = 0;
-        return res;
-      } catch (err: any) {
-        if (err.response?.status === 429) {
-          dynamicInterval = Math.max(dynamicInterval * 2, 60000);
-          console.warn(`[Aircraft] OpenSky rate limited (429). Backing off to ${dynamicInterval}ms`);
-          return null;
-        }
-        if (attempt === retries) throw err;
-        const backoff = Math.pow(2, attempt) * 1000;
-        console.warn(`[Aircraft] Fetch attempt ${attempt + 1} failed, retrying in ${backoff}ms`);
-        await wait(backoff);
-      }
+async function authHeaders(): Promise<Record<string, string>> {
+  const id = process.env.OPENSKY_CLIENT_ID;
+  const secret = process.env.OPENSKY_CLIENT_SECRET;
+  if (id && secret) {
+    if (!token || Date.now() > token.expiresAt - 60_000) {
+      const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: id, client_secret: secret });
+      const res = await client.post(TOKEN_URL, body.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+      token = { value: res.data.access_token, expiresAt: Date.now() + (res.data.expires_in ?? 1800) * 1000 };
     }
-    return null;
+    return { Authorization: `Bearer ${token.value}` };
   }
+  const user = process.env.OPENSKY_USERNAME;
+  const pass = process.env.OPENSKY_PASSWORD;
+  if (user && pass) return { Authorization: `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}` };
+  return {};
+}
 
-  async function fetchAndEmit() {
+export function isAircraftAuthenticated() {
+  return !!(process.env.OPENSKY_CLIENT_ID || process.env.OPENSKY_USERNAME);
+}
+
+export function startAircraftSource(onEntities: (entities: Entity[]) => void) {
+  const baseMs = isAircraftAuthenticated() ? 60_000 : 15 * 60_000;
+
+  return poll(async () => {
     try {
-      const res = await fetchWithRetry(url, { retries: 2 });
-      if (!res) {
-        consecutiveErrors++;
-        if (consecutiveErrors >= 3 && !usedFallback) {
-          console.warn('[Aircraft] Using demo fallback aircraft (set OPENSKY_USERNAME/PASSWORD for real data)');
-          onEntities(DEMO_AIRCRAFT);
-          usedFallback = true;
-        }
-        return;
-      }
-
-      const data = res.data;
-      const states = data.states || [];
-      if (states.length === 0) {
-        console.log('[Aircraft] OpenSky returned 0 states');
-        return;
-      }
-
-      const entities: Entity[] = states.map((s: any) => {
-        const icao24 = s[0];
-        const callsign = s[1] ? s[1].trim() : '';
-        const origin_country = s[2];
+      const res = await client.get(STATES_URL, { headers: await authHeaders(), timeout: 30000 });
+      const states: any[] = res.data?.states || [];
+      const out: Entity[] = [];
+      for (const s of states) {
         const lon = s[5];
         const lat = s[6];
-        const baro_alt = s[7];
-        const velocity = s[9];
-        const heading = s[10];
-        const geo_alt = s[13];
-
-        return {
-          id: `aircraft:opensky:${icao24}`,
+        if (typeof lat !== 'number' || typeof lon !== 'number') continue;
+        const onGround = !!s[8];
+        const alt = typeof s[13] === 'number' ? s[13] : typeof s[7] === 'number' ? s[7] : 0;
+        out.push({
+          id: `aircraft:${s[0]}`,
           type: 'aircraft',
-          position: {
-            lat: lat ?? 0,
-            lon: lon ?? 0,
-            alt: typeof geo_alt === 'number' ? geo_alt : (typeof baro_alt === 'number' ? baro_alt : undefined)
+          position: { lat, lon, alt: onGround ? 0 : alt },
+          velocity: typeof s[9] === 'number' ? s[9] : undefined,
+          heading: typeof s[10] === 'number' ? s[10] : undefined,
+          timestamp: (s[3] ?? s[4] ?? Date.now() / 1000) * 1000,
+          metadata: {
+            name: (s[1] || '').trim() || s[0],
+            callsign: (s[1] || '').trim() || undefined,
+            icao24: s[0],
+            originCountry: s[2],
+            onGround,
+            altitudeM: alt,
+            verticalRateMs: s[11] ?? undefined,
+            squawk: s[14] || undefined,
+            sourceUrl: `https://globe.adsbexchange.com/?icao=${s[0]}`,
           },
-          velocity: typeof velocity === 'number' ? velocity : undefined,
-          heading: typeof heading === 'number' ? heading : undefined,
-          timestamp: Math.floor((s[4] ?? Date.now() / 1000) * 1000),
-          metadata: { icao24, callsign, origin_country }
-        } as Entity;
-      });
-
-      console.log(`[Aircraft] Fetched ${entities.length} aircraft`);
-      onEntities(entities);
-      usedFallback = false;
+        });
+      }
+      console.log(`[Aircraft] ${out.length} aircraft`);
+      onEntities(out);
     } catch (err: any) {
-      console.warn('[Aircraft] Error fetching OpenSky data:', err?.message || err);
-      consecutiveErrors++;
-      if (consecutiveErrors >= 3 && !usedFallback) {
-        console.warn('[Aircraft] Using demo fallback aircraft (set OPENSKY_USERNAME/PASSWORD for real data)');
-        onEntities(DEMO_AIRCRAFT);
-        usedFallback = true;
+      const status = err?.response?.status;
+      if (status === 429) {
+        const retry = Number(err.response.headers?.['x-rate-limit-retry-after-seconds']);
+        const wait = Number.isFinite(retry) && retry > 0 ? retry * 1000 : 30 * 60_000;
+        console.warn(`[Aircraft] OpenSky credit limit reached; retrying in ${Math.round(wait / 60000)} min`);
+        return wait;
       }
-    } finally {
-      if (!stopped) {
-        timer = setTimeout(fetchAndEmit, dynamicInterval);
-        if (dynamicInterval > intervalMs) {
-          dynamicInterval = Math.max(intervalMs, Math.floor(dynamicInterval / 1.5));
-        }
-      }
+      if (status === 401) token = null;
+      console.warn('[Aircraft] Error:', err?.message || err);
+      return 2 * 60_000;
     }
-  }
-
-  fetchAndEmit();
-
-  return () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-  };
+  }, baseMs);
 }

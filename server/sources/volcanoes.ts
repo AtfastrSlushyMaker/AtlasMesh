@@ -1,5 +1,5 @@
-import axios from 'axios';
 import type { Entity } from '../../shared/entity';
+import { fetchCached } from '../lib/http';
 
 export type VolcanoPollOptions = {
   intervalMs?: number;
@@ -22,7 +22,7 @@ export function startVolcanoSource(
 
   async function fetchAndEmit() {
     try {
-      const res = await axios.get(url, { timeout: 15000 });
+      const res = { data: await fetchCached<any>(url, 24 * 60 * 60 * 1000, { timeout: 15000 }) };
       const volcanoes = res.data || [];
       
       const entities: Entity[] = [];
@@ -35,16 +35,18 @@ export function startVolcanoSource(
         if (isNaN(lat) || isNaN(lon)) return;
         
         entities.push({
-          id: `volcano:${v.volcanoNumber || v.volcanoName}`,
+          id: `volcano:${v.vnum || v.volcanoNumber || `${lat},${lon}`}`,
           type: 'volcano',
-          position: { lat, lon, alt: v.elevation ? parseFloat(v.elevation) : 0 },
+          position: { lat, lon, alt: 0 },
           timestamp: Date.now(),
           metadata: {
-            name: v.volcanoName || 'Unknown',
-            country: v.country || '',
-            type: v.volcanoType || '',
-            elevation: v.elevation ? parseFloat(v.elevation) : undefined,
-            lastEruption: v.lastEruptionYear || 'Unknown',
+            name: v.vName || v.volcanoName || 'Unknown volcano',
+            country: v.country || undefined,
+            region: v.subregion || undefined,
+            elevationM: Number.isFinite(Number(v.elevation_m)) ? Number(v.elevation_m) : undefined,
+            observatory: v.obsAbbr || undefined,
+            gvpNumber: v.vnum,
+            sourceUrl: v.webpage || undefined,
           }
         });
       });

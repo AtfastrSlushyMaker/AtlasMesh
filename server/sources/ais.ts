@@ -75,15 +75,19 @@ export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: 
             id: `ship:ais:${mmsi}`,
             type: 'ship',
             position: { lat, lon, alt: 0 },
-            velocity: toNumber(pos.Sog),
-            heading: toNumber(pos.TrueHeading ?? pos.Cog),
+            velocity: toNumber(pos.Sog) !== undefined ? toNumber(pos.Sog)! * 0.514444 : undefined, // knots → m/s
+            // TrueHeading 511 means "not available"
+            heading: toNumber(pos.TrueHeading) !== undefined && toNumber(pos.TrueHeading)! < 360 ? toNumber(pos.TrueHeading) : toNumber(pos.Cog),
             timestamp: Date.now(),
             metadata: {
+              name: meta.ShipName?.trim() || `MMSI ${mmsi}`,
               mmsi,
               shipName: meta.ShipName?.trim() || '',
               country: meta.country || '',
               sog: pos.Sog,
               cog: pos.Cog,
+              navStatus: pos.NavigationalStatus,
+              sourceUrl: `https://www.marinetraffic.com/en/ais/details/ships/mmsi:${mmsi}`,
             }
           };
           buffer.set(entity.id, entity);

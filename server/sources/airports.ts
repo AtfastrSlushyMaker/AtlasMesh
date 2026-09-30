@@ -1,5 +1,5 @@
-import axios from 'axios';
 import type { Entity } from '../../shared/entity';
+import { fetchCached } from '../lib/http';
 
 export type AirportPollOptions = {
   intervalMs?: number;
@@ -18,7 +18,7 @@ export function startAirportSource(
 
   async function fetchAndEmit() {
     try {
-      const res = await axios.get(AIRPORTS_URL, { timeout: 20000, responseType: 'text' });
+      const res = { data: await fetchCached<any>(AIRPORTS_URL, 7 * 24 * 60 * 60 * 1000, { timeout: 20000, responseType: 'text' }) };
       const lines = (res.data as string).split('\n').filter((l: string) => l.trim());
 
       const entities: Entity[] = [];

@@ -1,78 +1,49 @@
-import axios from 'axios';
+import { parse } from 'csv-parse/sync';
 import type { Entity } from '../../shared/entity';
+import { fetchCached, poll } from '../lib/http';
 
-export type MeteoritePollOptions = {
-  intervalMs?: number;
-};
+/**
+ * The Meteoritical Society landings catalogue, as published by NASA Open Data.
+ * data.nasa.gov retired its Socrata endpoint, so we read the TidyTuesday mirror
+ * of the same export.
+ */
+const CSV_URL =
+  'https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-06-11/meteorites.csv';
+const DAY = 24 * 60 * 60 * 1000;
 
-const NASA_URL = 'https://data.nasa.gov/resource/gh4g-9sfh.json?$limit=50000';
-
-export function startMeteoriteSource(
-  onEntities: (entities: Entity[]) => void,
-  opts?: MeteoritePollOptions
-) {
-  const intervalMs = opts?.intervalMs ?? 24 * 60 * 60 * 1000;
-  let stopped = false;
-  let timer: NodeJS.Timeout | null = null;
-
-  async function fetchAndEmit() {
+export function startMeteoriteSource(onEntities: (entities: Entity[]) => void) {
+  return poll(async () => {
     try {
-      const res = await axios.get(NASA_URL, {
-        timeout: 30000,
-        headers: { 'Accept': 'application/json' },
-      });
-      const rows = res.data as any[];
-
-      if (!Array.isArray(rows) || rows.length === 0) {
-        console.warn('[Meteorites] Empty response from NASA');
-        return;
-      }
-
-      const entities: Entity[] = [];
-      let skipped = 0;
-
+      const csv = await fetchCached<string>(CSV_URL, 30 * DAY, { responseType: 'text', timeout: 60000 });
+      const rows: any[] = parse(csv, { columns: true, skip_empty_lines: true, relax_column_count: true });
+      const out: Entity[] = [];
       for (const r of rows) {
-        const lat = r.reclat ? parseFloat(r.reclat) : NaN;
-        const lon = r.reclong ? parseFloat(r.reclong) : NaN;
-        if (isNaN(lat) || isNaN(lon) || lat === 0 && lon === 0) { skipped++; continue; }
-
-        const massG = r.mass ? parseFloat(r.mass) : undefined;
-        const year = r.year ? String(r.year).split('-')[0] : 'Unknown';
-
-        entities.push({
-          id: `meteorite:${r.id || r.name}`,
+        const lat = parseFloat(r.lat);
+        const lon = parseFloat(r.long);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) continue;
+        const mass = parseFloat(r.mass);
+        out.push({
+          id: `meteorite:${r.id}`,
           type: 'meteorite',
           position: { lat, lon, alt: 0 },
           timestamp: Date.now(),
           metadata: {
-            name: r.name || 'Unknown Meteorite',
-            massGrams: massG,
-            year,
-            recclass: r.recclass || '',
-            fall: r.fall || '',
+            name: r.name,
+            massGrams: Number.isFinite(mass) ? mass : undefined,
+            year: r.year || undefined,
+            recclass: r.class,
+            fall: r.fall,
+            sourceUrl: `https://www.lpi.usra.edu/meteor/metbull.php?code=${r.id}`,
           },
         });
       }
-
-      const sorted = entities.sort((a, b) => (b.metadata.massGrams || 0) - (a.metadata.massGrams || 0));
-      const capped = sorted.slice(0, 10000);
-      console.log(`[Meteorites] Fetched ${capped.length} meteorites (from ${entities.length} total, skipped ${skipped})`);
-      if (capped.length > 0) {
-        onEntities(capped);
-      }
+      out.sort((a, b) => (b.metadata.massGrams || 0) - (a.metadata.massGrams || 0));
+      const capped = out.slice(0, 8000);
+      console.log(`[Meteorites] ${capped.length} of ${out.length}`);
+      onEntities(capped);
     } catch (err: any) {
       console.warn('[Meteorites] Error:', err?.message || err);
-    } finally {
-      if (!stopped) {
-        timer = setTimeout(fetchAndEmit, intervalMs);
-      }
+      return 60 * 60 * 1000;
     }
-  }
-
-  fetchAndEmit();
-
-  return () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-  };
+  }, DAY);
 }

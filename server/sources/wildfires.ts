@@ -1,91 +1,52 @@
-import axios from 'axios';
+import { parse } from 'csv-parse/sync';
 import type { Entity } from '../../shared/entity';
+import { client, poll } from '../lib/http';
 
-export type WildfiresPollOptions = {
-  intervalMs?: number;
-  url?: string;
-};
+/** NASA FIRMS VIIRS (Suomi NPP) active-fire detections, last 24h. Public CSV, no key. */
+const URL =
+  'https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv';
 
-export function startWildfiresSource(
-  onEntities: (entities: Entity[]) => void,
-  opts?: WildfiresPollOptions
-) {
-  const intervalMs = opts?.intervalMs ?? 60 * 60 * 1000; // 1 hour
-  // FIX Bug #5: Use the open NRT (near-real-time) VIIRS feed which doesn't require MAP_KEY
-  const url = opts?.url ?? 'https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv';
+/** Global detections number in the tens of thousands; keep the most intense. */
+const MAX_FIRES = 2500;
 
-  let stopped = false;
-  let timer: NodeJS.Timeout | null = null;
-
-  async function fetchAndEmit() {
+export function startWildfiresSource(onEntities: (entities: Entity[]) => void) {
+  return poll(async () => {
     try {
-      const res = await axios.get(url, { timeout: 30000 });
-      const lines = res.data.split('\n');
-      const header = lines[0]?.split(',') || [];
-      
-      // Find column indices dynamically
-      const latIdx = header.findIndex((h: string) => h.trim().toLowerCase() === 'latitude');
-      const lonIdx = header.findIndex((h: string) => h.trim().toLowerCase() === 'longitude');
-      const brightIdx = header.findIndex((h: string) => h.trim().toLowerCase().includes('bright'));
-      const confIdx = header.findIndex((h: string) => h.trim().toLowerCase() === 'confidence');
-      const frpIdx = header.findIndex((h: string) => h.trim().toLowerCase() === 'frp');
-      const dateIdx = header.findIndex((h: string) => h.trim().toLowerCase() === 'acq_date');
-      const timeIdx = header.findIndex((h: string) => h.trim().toLowerCase() === 'acq_time');
-      
-      if (latIdx === -1 || lonIdx === -1) {
-        console.warn('[Wildfires] CSV header parsing failed, columns:', header.slice(0, 10));
-        return;
-      }
-
-      const entities: Entity[] = [];
-      const dataLines = lines.slice(1).filter((l: string) => l.trim().length > 0);
-      
-      // Limit to 500 to prevent overwhelming Cesium
-      for (let i = 0; i < Math.min(dataLines.length, 500); i++) {
-        const cols = dataLines[i].split(',');
-        const lat = parseFloat(cols[latIdx]);
-        const lon = parseFloat(cols[lonIdx]);
-        
-        if (isNaN(lat) || isNaN(lon)) continue;
-        
-        let timestamp = Date.now();
-        if (dateIdx !== -1 && timeIdx !== -1 && cols[dateIdx] && cols[timeIdx]) {
-          const t = cols[timeIdx].trim().padStart(4, '0');
-          try {
-            timestamp = new Date(`${cols[dateIdx].trim()}T${t.substring(0,2)}:${t.substring(2,4)}Z`).getTime();
-          } catch(e) {}
-        }
-
-        entities.push({
-          id: `wildfire:${i}_${lat.toFixed(2)}_${lon.toFixed(2)}`,
+      const res = await client.get(URL, { responseType: 'text', timeout: 60000 });
+      const rows: any[] = parse(String(res.data), { columns: true, skip_empty_lines: true });
+      const out: Entity[] = [];
+      for (const r of rows) {
+        const lat = parseFloat(r.latitude);
+        const lon = parseFloat(r.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+        if (r.confidence === 'l') continue; // low-confidence detections are mostly noise
+        const t = String(r.acq_time || '0000').padStart(4, '0');
+        const ts = Date.parse(`${r.acq_date}T${t.slice(0, 2)}:${t.slice(2)}:00Z`);
+        const frp = parseFloat(r.frp);
+        out.push({
+          id: `wildfire:${lat.toFixed(3)}:${lon.toFixed(3)}:${r.acq_date}${t}`,
           type: 'wildfire',
           position: { lat, lon },
-          timestamp,
+          timestamp: Number.isFinite(ts) ? ts : Date.now(),
           metadata: {
-            brightness: brightIdx !== -1 ? parseFloat(cols[brightIdx]) : undefined,
-            confidence: confIdx !== -1 ? cols[confIdx]?.trim() : undefined,
-            frp: frpIdx !== -1 ? parseFloat(cols[frpIdx]) : undefined,
-          }
+            name: `Fire hotspot ${lat.toFixed(2)}, ${lon.toFixed(2)}`,
+            frpMw: Number.isFinite(frp) ? frp : undefined,
+            brightnessK: parseFloat(r.bright_ti4) || undefined,
+            confidence: r.confidence === 'h' ? 'high' : 'nominal',
+            daynight: r.daynight === 'D' ? 'day' : 'night',
+            satellite: 'Suomi NPP / VIIRS',
+            detectedAt: Number.isFinite(ts) ? new Date(ts).toISOString() : undefined,
+            sourceUrl: 'https://firms.modaps.eosdis.nasa.gov/map/',
+          },
         });
       }
-
-      console.log(`[Wildfires] Fetched ${entities.length} active fire hotspots`);
-      if (entities.length > 0) {
-        onEntities(entities);
-      }
+      out.sort((a, b) => (b.metadata.frpMw || 0) - (a.metadata.frpMw || 0));
+      const top = out.slice(0, MAX_FIRES);
+      console.log(`[Wildfires] ${top.length} of ${out.length} hotspots`);
+      onEntities(top);
     } catch (err: any) {
       console.warn('[Wildfires] Error:', err?.message || err);
-    } finally {
-      if (!stopped) {
-        timer = setTimeout(fetchAndEmit, intervalMs);
-      }
+      return 10 * 60 * 1000;
     }
-  }
-
-  fetchAndEmit();
-
-  return () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-  };
+  }, 60 * 60 * 1000);
 }
