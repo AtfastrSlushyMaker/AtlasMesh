@@ -9,6 +9,8 @@ import { HelpDialog, Palette } from './shell/Palette';
 import { Settings } from './shell/Settings';
 import { Welcome } from './shell/Welcome';
 import { ConfirmHost } from './shell/confirm';
+import { RunLocallyDialog } from './shell/RunLocally';
+import { api } from './lib/api';
 import { Toasts } from './shell/toast';
 import { Icon } from './shell/Icon';
 import { Logo } from './shell/Logo';
@@ -178,6 +180,12 @@ export default function App() {
   useUrlSync();
 
   useEffect(() => {
+    api<{ mode: 'full' | 'showcase'; repoUrl: string; image: string }>('/api/config')
+      .then((server) => setApp({ server }))
+      .catch(() => setApp({ server: { mode: 'full', repoUrl: '', image: '' } }));
+  }, []);
+
+  useEffect(() => {
     document.body.dataset.drawer = drawer && mode === 'globe' ? 'open' : '';
   }, [drawer, mode]);
 
@@ -251,6 +259,7 @@ export default function App() {
       <Palette onPick={pick} />
       <HelpDialog />
       <Settings />
+      <RunLocallyDialog />
       <ConfirmHost />
       <Toasts />
       <Boot />

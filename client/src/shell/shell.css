@@ -853,6 +853,18 @@ body[data-drawer="open"] .welcome {
   }
 }
 
+@media (max-width: 1180px) {
+  .demo-badge {
+    font-size: 0;
+    padding: 0 10px;
+  }
+
+  .demo-badge::before {
+    content: "Run your own";
+    font-size: 13px;
+  }
+}
+
 @media (max-width: 899px) {
   :root {
     --rail-w: 0px;

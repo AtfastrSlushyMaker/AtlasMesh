@@ -9,6 +9,7 @@ import { Dock, DockTab } from './Dock';
 import { osint, pct } from './model';
 import { toast } from '../shell/toast';
 import { confirmAction } from '../shell/confirm';
+import { RunLocally } from '../shell/RunLocally';
 import { setApp, useApp } from '../state';
 import { storage } from '../lib/api';
 import './intel.css';
@@ -44,11 +45,24 @@ function KeyGate({ onUnlock }: { onUnlock: () => void }) {
 }
 
 export default function Workspace() {
-  const [access, setAccess] = useState<'checking' | 'ok' | 'locked'>('checking');
+  const [access, setAccess] = useState<'checking' | 'ok' | 'locked' | 'showcase'>('checking');
   useEffect(() => {
-    osint.access().then((r) => setAccess(r.ok ? 'ok' : 'locked')).catch(() => setAccess('ok'));
+    osint.access().then((r: any) => setAccess(r.showcase ? 'showcase' : r.ok ? 'ok' : 'locked')).catch(() => setAccess('ok'));
   }, []);
   if (access === 'checking') return <div className="intel" style={{ display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>;
+  if (access === 'showcase') {
+    return (
+      <div className="intel scroll" style={{ display: 'block', gridTemplateAreas: 'none' }}>
+        <div style={{ maxWidth: 720, margin: '0 auto', padding: '40px 20px' }}>
+          <h1 className="panel-title" style={{ fontSize: 32, marginBottom: 10 }}>The Intel workspace runs on your own computer</h1>
+          <p style={{ marginTop: 0 }}>
+            Investigations query outside services and can use a paid AI model, so this public demo leaves them off. Run AtlasMesh locally to map public information about handles, domains, organisations, repositories and papers, with every link tied to its source.
+          </p>
+          <RunLocally compact />
+        </div>
+      </div>
+    );
+  }
   if (access === 'locked') return <KeyGate onUnlock={() => setAccess('ok')} />;
   return <WorkspaceInner />;
 }

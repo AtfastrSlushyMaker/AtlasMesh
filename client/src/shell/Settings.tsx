@@ -10,6 +10,7 @@ import { DEFAULT_PREFS, SettingsSection, setApp, setPrefs, useApp } from '../sta
 import { BASEMAPS } from '../globe/engine';
 import { defaultVisibility } from '../lib/layers';
 import { api, storage } from '../lib/api';
+import { RunLocally } from './RunLocally';
 
 interface ServerSetting {
   key: string;
@@ -241,7 +242,18 @@ function KeyCard({ s, canEdit, pairValue, onChanged, value, setValue }: { s: Ser
   );
 }
 
+function ShowcaseNotice() {
+  return (
+    <div className="key-card" style={{ marginTop: 16, borderTop: '4px solid var(--accent)' }}>
+      <div className="setting-label" style={{ marginBottom: 6 }}>This is the public demo</div>
+      <p className="setting-help" style={{ marginBottom: 14 }}>API keys and the Intel workspace are off here, so nobody’s keys or lookups run on a shared server. Run your own copy to use them:</p>
+      <RunLocally compact />
+    </div>
+  );
+}
+
 function Keys() {
+  const showcase = useApp((s) => s.server?.mode === 'showcase');
   const [data, setData] = useState<SettingsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -265,6 +277,7 @@ function Keys() {
       <p className="muted" style={{ fontSize: 14.5 }}>
         Every key is optional. Keys are stored on the server in <code>server/data/settings.json</code>, never in this browser, and are shown masked. Feeds that use a key restart as soon as you save it.
       </p>
+      {showcase && <ShowcaseNotice />}
       {error && <p role="alert" style={{ color: 'var(--bad)' }}>Settings couldn’t be loaded: {error}. Check that the server is running.</p>}
       {!data && !error && <div className="skeleton" style={{ height: 120 }} />}
       {data && (
@@ -278,7 +291,7 @@ function Keys() {
               <div key={k} className="stat"><div className="num" style={{ fontSize: 20 }}>{v}</div><div className="label">{k}</div></div>
             ))}
           </div>
-          {!data.canEdit && (
+          {!data.canEdit && !showcase && (
             <div className="key-card" style={{ borderColor: 'var(--warn)', marginTop: 12 }}>
               <div className="setting-label">Read only</div>
               <p className="setting-help">{data.reason}</p>
@@ -292,7 +305,7 @@ function Keys() {
               </form>
             </div>
           )}
-          {groups.map(([group, list]) => (
+          {!showcase && groups.map(([group, list]) => (
             <div key={group} style={{ marginTop: 26 }}>
               <h3 className="section-title" style={{ fontSize: 16, marginBottom: 10, color: 'var(--text)' }}>{group}</h3>
               {list.map((s) => (
@@ -315,6 +328,7 @@ function Keys() {
 }
 
 function IntelSection() {
+  const showcase = useApp((s) => s.server?.mode === 'showcase');
   const d = useApp((s) => s.prefs.intelDefaults);
   const set = (patch: Partial<typeof d>) => setPrefs({ intelDefaults: { ...d, ...patch } });
   const [key, setKey] = useState('');
@@ -322,6 +336,7 @@ function IntelSection() {
   return (
     <section aria-labelledby="s-intel">
       <h2 id="s-intel" className="panel-title" style={{ fontSize: 28 }}>Intel workspace</h2>
+      {showcase && <ShowcaseNotice />}
       <p className="muted" style={{ fontSize: 14.5 }}>Defaults for new investigations. Each investigation can change its own limits later.</p>
       <Row label="Follow depth" help="How many steps discovery may follow strong leads from the entity you expand.">
         <Seg label="Follow depth" value={String(d.maxDepth) as '1' | '2' | '3'} onChange={(v) => set({ maxDepth: Number(v) })} options={[['1', 'Only that entity'], ['2', '1 step'], ['3', '2 steps']]} />

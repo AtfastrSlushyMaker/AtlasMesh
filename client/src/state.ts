@@ -49,6 +49,9 @@ export interface AppState {
   intelSeed: { value: string; type?: string } | null;
   prefs: Prefs;
   settings: SettingsSection | null;
+  /** What the server allows: 'showcase' is the public demo with Intel and keys off. */
+  server: { mode: 'full' | 'showcase'; repoUrl: string; image: string } | null;
+  runLocalOpen: boolean;
 }
 
 const saved = storage.get<Partial<AppState>>('prefs', {});
@@ -67,6 +70,8 @@ let state: AppState = {
   intelSeed: null,
   prefs: { ...DEFAULT_PREFS, ...(saved.prefs || {}), intelDefaults: { ...DEFAULT_PREFS.intelDefaults, ...(saved.prefs?.intelDefaults || {}) } },
   settings: null,
+  server: null,
+  runLocalOpen: false,
 };
 
 const listeners = new Set<() => void>();

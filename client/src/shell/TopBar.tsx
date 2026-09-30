@@ -93,6 +93,7 @@ function Counters() {
 export function EarthStrip() {
   const { conn } = useLive();
   const mode = useApp((s) => s.mode);
+  const showcase = useApp((s) => s.server?.mode === 'showcase');
   const [label, color] = CONN_TEXT[conn];
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
   return (
@@ -104,6 +105,11 @@ export function EarthStrip() {
       <Clock />
       {mode === 'globe' ? <Counters /> : <div className="counters" style={{ alignItems: 'center', padding: '0 16px', fontWeight: 700 }}>Intel workspace</div>}
       <div className="strip-spacer" />
+      {showcase && (
+        <button className="btn btn-primary btn-sm demo-badge" style={{ alignSelf: 'center', marginLeft: 12 }} onClick={() => setApp({ runLocalOpen: true })}>
+          Public demo · Run your own
+        </button>
+      )}
       <button className="strip-search" onClick={() => setApp({ paletteOpen: true })} aria-label="Search places, entities and commands">
         <Icon path={mdiMagnify} />
         <span className="search-text" style={{ flex: 1 }}>Search the globe…</span>
