@@ -30,7 +30,7 @@ import { osintRouter } from '../osint/routes';
 import { analystAvailable } from '../osint/analyst';
 import { settingsSummary, updateSettings } from '../services/config';
 import { testSetting } from '../services/settingsTest';
-import { accessKey, canEditSettings } from '../lib/access';
+import { accessKey, canEditSettings, isShowcase, REPO_URL, IMAGE } from '../lib/access';
 
 const VERSION = '2.1.0';
 const MIN = 60 * 1000;
@@ -140,6 +140,12 @@ app.get('/api/near', (req, res) => {
 });
 
 app.use('/api/osint', osintRouter);
+
+// Tells the client which mode it's in and how to run a full copy.
+app.get('/api/config', (_req, res) => {
+  res.json({ mode: isShowcase() ? 'showcase' : 'full', repoUrl: REPO_URL, image: IMAGE, version: VERSION });
+});
+
 // Handlers are attached further down, next to the source lifecycle they control.
 const settingsRouter = express.Router();
 app.use('/api/settings', settingsRouter);
@@ -344,7 +350,7 @@ settingsRouter.get('/', (req, res) => {
   const editable = canEditSettings(req);
   res.json({
     canEdit: editable,
-    reason: editable ? null : accessKey() ? 'Enter the workspace access key to change settings.' : 'Settings can only be changed from the computer running the server, or after an access key is set there.',
+    reason: editable ? null : isShowcase() ? 'This is the public demo, so keys can’t be added here. Run AtlasMesh yourself to use your own keys.' : accessKey() ? 'Enter the workspace access key to change settings.' : 'Settings can only be changed from the computer running the server, or after an access key is set there.',
     settings: settingsSummary(),
     services: { llm: analystAvailable(), aircraftAuthenticated: isAircraftAuthenticated(), ships: !!process.env.AISSTREAM_TOKEN },
   });
