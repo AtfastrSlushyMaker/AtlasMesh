@@ -46,7 +46,10 @@ npm run start:client   # Vite on :5173 (proxies /api to :3000)
 
 Production: `npm run build && npm start` serves the client and API on one port.
 
-### Optional keys (`.env`)
+### Optional keys
+
+Add them in the app under **Settings → API keys** (each key can be tested before saving; they're stored in `server/data/settings.json`), or put them in `.env`, which takes precedence. Settings can be changed from the machine running the server, or from anywhere once `OSINT_ACCESS_KEY` is set.
+
 
 | Variable | Unlocks |
 |---|---|
@@ -162,7 +165,7 @@ shared/       entity and OSINT types
 
 ## Keyboard
 
-`⌘K` or `/` search · `L` layers · `A` activity · `I` Intel · `G` globe · `+` `−` zoom · `H` whole Earth · `Esc` close · `?` help
+`⌘K` or `/` search · `⌘,` settings · `L` layers · `F` feeds · `A` activity · `I` Intel · `G` globe · `+` `−` zoom · `H` whole Earth · `Esc` close · `?` help
 
 ---
 
