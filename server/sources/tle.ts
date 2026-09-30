@@ -53,6 +53,11 @@ function toEntity(t: Tle, type: 'satellite' | 'starlink'): Entity {
 
 const isStarlink = (t: Tle) => /^STARLINK[- ]/i.test(t.name);
 
+const explain = (err: any) =>
+  err?.response?.status === 403
+    ? 'Celestrak allows one download of this data every 2 hours per address; retrying in 15 minutes'
+    : err?.message || String(err);
+
 export function startSatellitesSource(onEntities: (entities: Entity[]) => void) {
   return poll(async () => {
     try {
@@ -61,7 +66,7 @@ export function startSatellitesSource(onEntities: (entities: Entity[]) => void) 
       console.log(`[Satellites] ${out.length} active (Starlink excluded)`);
       onEntities(out);
     } catch (err: any) {
-      console.warn('[Satellites] Error:', err?.message || err);
+      console.warn('[Satellites] Error:', explain(err));
       return 15 * 60 * 1000;
     }
   }, TTL);
@@ -75,7 +80,7 @@ export function startStarlinkSource(onEntities: (entities: Entity[]) => void) {
       console.log(`[Starlink] ${out.length} satellites`);
       onEntities(out);
     } catch (err: any) {
-      console.warn('[Starlink] Error:', err?.message || err);
+      console.warn('[Starlink] Error:', explain(err));
       return 15 * 60 * 1000;
     }
   }, TTL);

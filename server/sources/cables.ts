@@ -34,26 +34,21 @@ export function startSubmarineCableSource(
         const id = props.id || props.slug || `cable_${idx}`;
         const name = props.name || 'Unknown Cable';
         
-        // For MultiLineString or LineString, extract representative coordinates
-        let coordinates: number[][] = [];
-        if (geom.type === 'MultiLineString') {
-          // Flatten all line segments
-          geom.coordinates.forEach((segment: number[][]) => {
-            coordinates.push(...segment);
+        // Keep segments separate: joining them draws straight lines across continents.
+        const rawSegments: number[][][] =
+          geom.type === 'MultiLineString' ? geom.coordinates : geom.type === 'LineString' ? [geom.coordinates] : [];
+        const segments = rawSegments
+          .filter((seg) => seg.length > 1)
+          .map((seg) => {
+            const step = Math.max(1, Math.ceil(seg.length / 60));
+            const out = seg.filter((_, i) => i % step === 0);
+            if (out[out.length - 1] !== seg[seg.length - 1]) out.push(seg[seg.length - 1]);
+            return out.map((c) => ({ lon: +c[0].toFixed(4), lat: +c[1].toFixed(4) }));
           });
-        } else if (geom.type === 'LineString') {
-          coordinates = geom.coordinates;
-        }
-        
-        if (coordinates.length === 0) return;
-
-        // Sample every Nth coordinate for the cable path (too many points = too slow)
-        const sampleRate = Math.max(1, Math.floor(coordinates.length / 20));
-        const sampledCoords = coordinates.filter((_: any, i: number) => i % sampleRate === 0);
-        
-        // Use the midpoint as the entity position
-        const midIdx = Math.floor(sampledCoords.length / 2);
-        const midCoord = sampledCoords[midIdx] || sampledCoords[0];
+        if (!segments.length) return;
+        const longest = segments.reduce((a, b) => (b.length > a.length ? b : a));
+        const mid = longest[Math.floor(longest.length / 2)];
+        const midCoord = [mid.lon, mid.lat];
 
         entities.push({
           id: `cable:${id}`,
@@ -69,9 +64,9 @@ export function startSubmarineCableSource(
             length_km: props.length ? parseFloat(props.length) : undefined,
             owners: props.owners || '',
             rfs: props.rfs || '', // Ready for service date
-            url: props.url || '',
+            sourceUrl: props.url || `https://www.submarinecablemap.com/submarine-cable/${props.id || ''}`,
             // Store sampled path for polyline rendering on client
-            path: sampledCoords.map((c: number[]) => ({ lon: c[0], lat: c[1] })),
+            segments,
           }
         });
       });

@@ -7,7 +7,8 @@ import { client, poll } from '../lib/http';
  * recent positions so they can be drawn as paths.
  */
 const URL = 'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=60';
-const MAX_WILDFIRE_EVENTS = 400; // FIRMS already covers fires in detail
+// FIRMS covers fires in far more detail; EONET fire events would duplicate it.
+const MAX_WILDFIRE_EVENTS = 0;
 
 export function startEventsSource(onEntities: (entities: Entity[]) => void) {
   return poll(async () => {

@@ -76,8 +76,8 @@ export function startFireballsSource(
           position: { lat, lon, alt: altitudeKm && Number.isFinite(altitudeKm) ? altitudeKm * 1000 : undefined },
           timestamp: Number.isFinite(when) ? when : Date.now(),
           metadata: {
-            title: 'NASA Fireball Event',
-            source: 'NASA JPL CNEOS Fireball API',
+            name: `Fireball ${dateRaw ? String(dateRaw).slice(0, 10) : ''}`.trim(),
+            sourceUrl: 'https://cneos.jpl.nasa.gov/fireballs/',
             energy_kt: Number.isFinite(energy as number) ? energy : undefined,
             impact_energy_kt: Number.isFinite(impactEnergy as number) ? impactEnergy : undefined,
             altitude_km: Number.isFinite(altitudeKm as number) ? altitudeKm : undefined,

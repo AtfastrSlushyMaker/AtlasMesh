@@ -57,7 +57,7 @@ export function startIXPSource(
         onEntities(entities);
       }
     } catch (err: any) {
-      console.warn('[IXP] Error:', err?.message || err);
+      console.warn('[IXP] Error:', err?.response?.status === 429 ? 'PeeringDB rate limit reached; retrying in 10 minutes' : err?.message || err);
       failed = true;
     } finally {
       if (!stopped) {
