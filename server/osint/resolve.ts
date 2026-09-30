@@ -1,6 +1,6 @@
 import type { ConfidenceSignal, GraphEdge, GraphNode, Investigation } from '../../shared/osint';
 import { levelForScore } from '../../shared/osint';
-import { normName, normOrg, platformLabel } from './normalize';
+import { nodeTitle, normName, normOrg, platformLabel } from './normalize';
 import { newId } from './repository';
 import { claimFor } from './confidence';
 
@@ -128,7 +128,7 @@ function compare(a: Cluster, b: Cluster, inv: Investigation): { score: number; s
   const aToB = [...a.linksTo].some((id) => idsB.has(id));
   const bToA = [...b.linksTo].some((id) => idsA.has(id));
   if (aToB && bToA) signals.push({ id: 'res:mutual-link', label: 'Profiles link to each other', weight: 0.7 });
-  else if (aToB || bToA) signals.push({ id: 'res:cross-link', label: 'One profile links to the other', weight: 0.5, detail: aToB ? `${a.anchor.label} → ${b.anchor.label}` : `${b.anchor.label} → ${a.anchor.label}` });
+  else if (aToB || bToA) signals.push({ id: 'res:cross-link', label: 'One profile links to the other', weight: 0.5, detail: aToB ? `${nodeTitle(a.anchor)} → ${nodeTitle(b.anchor)}` : `${nodeTitle(b.anchor)} → ${nodeTitle(a.anchor)}` });
 
   const sharedEmail = [...a.emails].filter((e) => b.emails.has(e));
   if (sharedEmail.length) signals.push({ id: 'res:email', label: 'Same public email address', weight: 0.55, detail: sharedEmail.map(labelOf).join(', ') });
@@ -172,7 +172,7 @@ function explain(a: Cluster, b: Cluster, signals: ConfidenceSignal[], score: num
   const positives = signals.filter((s) => s.weight > 0).map((s) => (s.detail ? `${s.label.toLowerCase()} (${s.detail})` : s.label.toLowerCase()));
   const negatives = signals.filter((s) => s.weight < 0).map((s) => s.label.toLowerCase());
   const verb = score >= 0.9 ? 'is' : score >= 0.72 ? 'is likely' : score >= 0.5 ? 'may be' : 'could be';
-  let text = `${a.anchor.label} ${verb} the same real-world entity as ${b.anchor.label}`;
+  let text = `${nodeTitle(a.anchor)} ${verb} the same real-world entity as ${nodeTitle(b.anchor)}`;
   if (positives.length) text += ` because of: ${positives.join('; ')}`;
   if (negatives.length) text += `. Against: ${negatives.join('; ')}`;
   return `${text}.`;

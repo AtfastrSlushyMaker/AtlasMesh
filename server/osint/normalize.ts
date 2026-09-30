@@ -255,3 +255,14 @@ export function detectSeed(raw: string): { type: NodeType; value: string; label:
   if (/^[a-z0-9_-]{3,39}$/i.test(s) && !/\s/.test(s)) return { type: 'account', value: `username:${s.toLowerCase()}`, label: `@${s}` };
   return { type: 'person', value: s, label: s };
 }
+
+/** Human label that disambiguates people by the source that asserted them. */
+export function nodeTitle(n: { type: string; key: string; label: string }) {
+  if (n.type !== 'person') return n.label;
+  const scope = n.key.split('|')[1];
+  if (!scope || scope === 'seed') return n.label;
+  const i = scope.lastIndexOf(':');
+  const kind = scope.slice(0, i);
+  const where = kind === 'site' ? scope.slice(i + 1) : kind === 'doi' ? 'a paper' : kind === 'arxiv' ? 'arXiv' : platformLabel(kind);
+  return `${n.label} (via ${where})`;
+}

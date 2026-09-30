@@ -1,5 +1,5 @@
 import type { Contradiction, GraphEdge, GraphNode, Investigation, TimelineEvent } from '../../shared/osint';
-import { normName } from './normalize';
+import { nodeTitle, normName } from './normalize';
 import { newId } from './repository';
 
 /**
@@ -263,7 +263,7 @@ export function nextSteps(inv: Investigation, available: (n: GraphNode) => strin
   }
   const hypotheses = Object.values(inv.edges).filter((e) => e.type === 'POSSIBLY_SAME_ENTITY_AS' && e.review === 'unreviewed').slice(0, 3);
   const out = suggestions.sort((a, b) => b.priority - a.priority).slice(0, limit);
-  return { expand: out, reviewIdentity: hypotheses.map((e) => ({ edgeId: e.id, label: `${inv.nodes[e.from]?.label} ↔ ${inv.nodes[e.to]?.label}`, score: e.confidence.score })) };
+  return { expand: out, reviewIdentity: hypotheses.map((e) => ({ edgeId: e.id, label: `${inv.nodes[e.from] ? nodeTitle(inv.nodes[e.from]) : '?'} ↔ ${inv.nodes[e.to] ? nodeTitle(inv.nodes[e.to]) : '?'}`, score: e.confidence.score })) };
 }
 
 export function neighbors(inv: Investigation, id: string) {
