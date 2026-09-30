@@ -111,6 +111,7 @@ export function Globe() {
     return () => {
       handler.destroy();
       setViewer(null);
+      setLocalViewer(null);
       (window as any).__atlasViewer = undefined;
       if (!v.isDestroyed()) v.destroy();
     };
@@ -123,7 +124,7 @@ export function Globe() {
 
   const appliedBasemap = useRef<string | null>(null);
   useEffect(() => {
-    if (!viewer || appliedBasemap.current === basemap) return;
+    if (!viewer || viewer.isDestroyed() || appliedBasemap.current === basemap) return;
     const first = appliedBasemap.current === null;
     appliedBasemap.current = basemap;
     setBasemap(viewer, basemap);
@@ -133,7 +134,7 @@ export function Globe() {
 
   const appliedOverlays = useRef<Record<string, boolean>>({});
   useEffect(() => {
-    if (!viewer) return;
+    if (!viewer || viewer.isDestroyed()) return;
     for (const [id, on] of Object.entries(overlays)) {
       if (!!appliedOverlays.current[id] === on) continue;
       appliedOverlays.current[id] = on;
@@ -144,14 +145,14 @@ export function Globe() {
   }, [viewer, overlays, basemap]);
 
   useEffect(() => {
-    if (!viewer) return;
+    if (!viewer || viewer.isDestroyed()) return;
     viewer.scene.globe.enableLighting = lighting;
     viewer.scene.requestRender();
   }, [viewer, lighting]);
 
   // Selection ring follows the selected entity
   useEffect(() => {
-    if (!viewer || !selectedId) return;
+    if (!viewer || viewer.isDestroyed() || !selectedId) return;
     let target: Cesium.Entity | undefined;
     for (let i = 0; i < viewer.dataSources.length && !target; i++) target = viewer.dataSources.get(i).entities.getById(selectedId);
     if (!target?.position) return;
@@ -163,14 +164,15 @@ export function Globe() {
     });
     viewer.scene.requestRender();
     return () => {
-      if (!viewer.isDestroyed()) viewer.entities.remove(ring);
+      if (viewer.isDestroyed()) return;
+      viewer.entities.remove(ring);
       viewer.scene.requestRender();
     };
   }, [viewer, selectedId]);
 
   // Pause rendering while the Intel workspace covers the globe.
   useEffect(() => {
-    if (!viewer) return;
+    if (!viewer || viewer.isDestroyed()) return;
     viewer.useDefaultRenderLoop = mode === 'globe';
   }, [viewer, mode]);
 

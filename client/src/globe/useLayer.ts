@@ -63,7 +63,7 @@ export function useLayer(viewer: Cesium.Viewer | null, visible: boolean, spec: L
 
   useEffect(() => {
     const ds = dsRef.current;
-    if (!ds || !viewer) return;
+    if (!ds || !viewer || viewer.isDestroyed()) return;
     ds.show = visible;
     if (!visible) {
       // Free memory: the server stops sending this layer and resends a snapshot when re-enabled.
@@ -79,7 +79,7 @@ export function useLayer(viewer: Cesium.Viewer | null, visible: boolean, spec: L
     if (!viewer) return;
     return onDiff((diff) => {
       const ds = dsRef.current;
-      if (!ds || !ds.show) return;
+      if (!ds || !ds.show || viewer.isDestroyed()) return;
       const s = specRef.current;
       const type = s.type;
       let touched = false;
