@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { Globe, currentPosition } from './globe/Globe';
 import { Rail } from './shell/Rail';
 import { TopBar, MapControls } from './shell/TopBar';
@@ -12,6 +12,9 @@ import { flyTo } from './globe/engine';
 import { entityIndex } from './globe/index';
 import { useLive } from './lib/live';
 import './shell/shell.css';
+
+// Cytoscape and the workspace load only when Intel is opened.
+const IntelWorkspace = lazy(() => import('./intel/Workspace'));
 
 function useShortcuts() {
   useEffect(() => {
@@ -123,6 +126,11 @@ export default function App() {
           {drawer === 'feeds' && <FeedsDrawer />}
           <Inspector onPick={pick} />
         </>
+      )}
+      {mode === 'intel' && (
+        <Suspense fallback={<div className="boot"><div className="spinner" /></div>}>
+          <IntelWorkspace />
+        </Suspense>
       )}
       <Rail />
       <Palette onPick={pick} />
