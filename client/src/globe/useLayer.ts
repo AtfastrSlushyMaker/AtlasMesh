@@ -36,10 +36,10 @@ export function useLayer(viewer: Cesium.Viewer | null, visible: boolean, spec: L
       ds.clustering.clusterEvent.addEventListener((entities: Cesium.Entity[], cluster: any) => {
         cluster.label.show = true;
         cluster.label.text = entities.length > 999 ? `${Math.round(entities.length / 100) / 10}k` : String(entities.length);
-        cluster.label.font = '600 12px Barlow, sans-serif';
-        cluster.label.fillColor = Cesium.Color.fromCssColorString('#e6e1d3');
+        cluster.label.font = '600 12px Archivo, sans-serif';
+        cluster.label.fillColor = Cesium.Color.fromCssColorString('#10202a');
         cluster.label.showBackground = true;
-        cluster.label.backgroundColor = Cesium.Color.fromCssColorString('#0e1822').withAlpha(0.85);
+        cluster.label.backgroundColor = Cesium.Color.fromCssColorString('#eef1f2').withAlpha(0.92);
         cluster.label.backgroundPadding = new Cesium.Cartesian2(5, 3);
         cluster.label.pixelOffset = new Cesium.Cartesian2(0, -18);
         cluster.label.verticalOrigin = Cesium.VerticalOrigin.BOTTOM;

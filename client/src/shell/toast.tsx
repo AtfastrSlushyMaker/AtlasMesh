@@ -29,7 +29,7 @@ function dismiss(id: number) {
 }
 
 const ICON: Record<Kind, [string, string]> = {
-  info: [mdiInformationOutline, 'var(--chart-blue)'],
+  info: [mdiInformationOutline, 'var(--link)'],
   success: [mdiCheckCircleOutline, 'var(--ok)'],
   error: [mdiAlertCircleOutline, 'var(--bad)'],
 };

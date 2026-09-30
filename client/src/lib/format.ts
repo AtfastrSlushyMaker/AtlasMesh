@@ -1,3 +1,5 @@
+import { getApp } from '../state';
+
 const nf = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
 const nf0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
@@ -57,4 +59,54 @@ export function titleCase(key: string) {
     .replace(/[_-]+/g, ' ')
     .replace(/\b(ms|m|km|c|mw|hpa|pct|s|mm|k)$/i, (u) => `(${u})`)
     .replace(/^./, (c) => c.toUpperCase());
+}
+
+// ---------- Unit-aware formatting (follows Settings → General → Units) ----------
+
+const units = () => getApp().prefs.units;
+
+/** Speed from metres per second. */
+export function fmtSpeed(ms: number | undefined | null) {
+  if (ms == null || !Number.isFinite(ms)) return undefined;
+  const u = units();
+  if (u === 'imperial') return `${fmtNum(ms * 2.23694, 0)} mph`;
+  if (u === 'nautical') return `${fmtNum(ms * 1.94384, 0)} kn`;
+  return `${fmtNum(ms * 3.6, 0)} km/h`;
+}
+
+/** Wind uses m/s in metric, which is what forecasters use. */
+export function fmtWind(ms: number | undefined | null) {
+  if (ms == null || !Number.isFinite(ms)) return undefined;
+  const u = units();
+  if (u === 'imperial') return `${fmtNum(ms * 2.23694, 0)} mph`;
+  if (u === 'nautical') return `${fmtNum(ms * 1.94384, 0)} kn`;
+  return `${fmtNum(ms, 1)} m/s`;
+}
+
+/** Height or elevation from metres. */
+export function fmtHeight(m: number | undefined | null) {
+  if (m == null || !Number.isFinite(m)) return undefined;
+  return units() === 'metric' ? `${fmtNum(m, 0)} m` : `${fmtNum(m * 3.28084, 0)} ft`;
+}
+
+/** Distance from kilometres. */
+export function fmtDistance(km: number | undefined | null) {
+  if (km == null || !Number.isFinite(km)) return undefined;
+  const u = units();
+  if (u === 'imperial') return `${fmtNum(km * 0.621371, km < 16 ? 1 : 0)} mi`;
+  if (u === 'nautical') return `${fmtNum(km * 0.539957, km < 18 ? 1 : 0)} nmi`;
+  return `${fmtNum(km, km < 10 ? 1 : 0)} km`;
+}
+
+export function fmtTemp(c: number | undefined | null) {
+  if (c == null || !Number.isFinite(c)) return undefined;
+  return units() === 'imperial' ? `${fmtNum(c * 1.8 + 32, 0)} °F` : `${fmtNum(c, 1)} °C`;
+}
+
+/** Clock text for the strip: UTC or local per preference. */
+export function fmtClock(d: Date) {
+  const utc = getApp().prefs.clock === 'utc';
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: utc ? 'UTC' : undefined });
+  const date = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: utc ? 'UTC' : undefined });
+  return { time, date, zone: utc ? 'UTC' : Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop()!.replace(/_/g, ' ') };
 }

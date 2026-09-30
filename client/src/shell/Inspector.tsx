@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { mdiClose, mdiContentCopy, mdiOpenInNew, mdiCrosshairsGps, mdiGraphOutline, mdiRefresh } from '@mdi/js';
+import { mdiClose, mdiContentCopy, mdiOpenInNew, mdiCrosshairsGps, mdiGraphOutline, mdiRefresh, mdiShareVariantOutline } from '@mdi/js';
+import { shareUrl } from '../lib/url';
 import type { Entity } from '../../../shared/entity';
 import { Icon } from './Icon';
 import { LAYERS, LAYER_BY_ID } from '../lib/layers';
@@ -8,82 +9,84 @@ import { currentPosition } from '../globe/Globe';
 import { flyTo } from '../globe/engine';
 import { getApp, getViewer, setApp, useApp } from '../state';
 import { api } from '../lib/api';
-import { fmtAgo, fmtAltitude, fmtDate, fmtDMS, fmtNum, titleCase } from '../lib/format';
+import { fmtAgo, fmtAltitude, fmtDate, fmtDMS, fmtDistance, fmtHeight, fmtNum, fmtSpeed, fmtTemp, fmtWind, titleCase } from '../lib/format';
 import { toast } from './toast';
 
 type Row = [label: string, value: React.ReactNode];
+type Stat = [label: string, value: string | undefined];
 const u = (v: any, unit: string, digits = 1) => (v == null || v === '' || !Number.isFinite(Number(v)) ? undefined : `${fmtNum(Number(v), digits)} ${unit}`);
+const n = (v: any) => (v == null || v === '' || !Number.isFinite(Number(v)) ? undefined : Number(v));
+const kmh = (v: any) => (n(v) != null ? fmtSpeed(n(v)! / 3.6) : undefined);
+const knots = (v: any) => (n(v) != null ? fmtSpeed(n(v)! * 0.514444) : undefined);
 
-/** Curated, human-readable facts per layer. Anything else is under "All fields". */
-function facts(e: Entity): { subtitle?: string; rows: Row[] } {
+/**
+ * Curated facts per layer: up to three headline stats, then detail rows.
+ * Anything else is under "All fields". Units follow Settings.
+ */
+function facts(e: Entity): { subtitle?: string; stats: Stat[]; rows: Row[] } {
   const m = e.metadata || {};
-  const speedKmh = e.velocity != null ? e.velocity * 3.6 : undefined;
   switch (e.type) {
     case 'aircraft':
       return {
         subtitle: [m.callsign, m.originCountry].filter(Boolean).join(' · '),
-        rows: [
-          ['Status', m.onGround ? 'On the ground' : 'Airborne'],
-          ['Altitude', u(m.altitudeM, 'm', 0)],
-          ['Ground speed', u(speedKmh, 'km/h', 0)],
-          ['Heading', u(e.heading, '°', 0)],
-          ['Vertical rate', u(m.verticalRateMs, 'm/s')],
-          ['Squawk', m.squawk],
-          ['ICAO 24-bit', m.icao24],
-          ['Last contact', fmtAgo(e.timestamp)],
-        ],
+        stats: [['Altitude', m.onGround ? 'Ground' : fmtHeight(m.altitudeM)], ['Speed', fmtSpeed(e.velocity)], ['Heading', u(e.heading, '°', 0)]],
+        rows: [['Vertical rate', m.verticalRateMs != null ? `${fmtHeight(m.verticalRateMs * 60)}/min` : undefined], ['Squawk', m.squawk], ['ICAO 24-bit', m.icao24], ['Last contact', fmtAgo(e.timestamp)]],
       };
     case 'ship':
-      return { subtitle: `MMSI ${m.mmsi}`, rows: [['Speed', u(m.sog, 'kn')], ['Course', u(m.cog, '°', 0)], ['Last report', fmtAgo(e.timestamp)]] };
+      return { subtitle: `MMSI ${m.mmsi}`, stats: [['Speed', knots(m.sog)], ['Course', u(m.cog, '°', 0)]], rows: [['Last report', fmtAgo(e.timestamp)]] };
     case 'satellite':
     case 'starlink':
-      return { subtitle: `NORAD ${m.noradId}`, rows: [['Inclination', u(m.inclinationDeg, '°')], ['Orbital period', u(m.periodMin, 'min')]] };
+      return { subtitle: `NORAD ${m.noradId}`, stats: [['Inclination', u(m.inclinationDeg, '°')], ['Orbit', u(m.periodMin, 'min')]], rows: [] };
     case 'iss':
-      return { rows: [['Altitude', u(m.altitudeKm, 'km', 0)], ['Speed', u(m.velocityKms != null ? m.velocityKms : undefined, 'km/h', 0)], ['Visibility', m.visibility], ['Footprint', u(m.footprint, 'km', 0)]] };
+      return { stats: [['Altitude', n(m.altitudeKm) != null ? fmtDistance(m.altitudeKm) : undefined], ['Speed', kmh(m.velocityKms)], ['Sunlight', m.visibility === 'daylight' ? 'Day side' : m.visibility ? 'Night side' : undefined]], rows: [['Footprint', fmtDistance(m.footprint)]] };
     case 'earthquake':
       return {
         subtitle: m.place,
-        rows: [['Magnitude', m.mag != null ? `M${Number(m.mag).toFixed(1)}` : undefined], ['Depth', u(m.depthKm, 'km')], ['Time', `${fmtDate(e.timestamp)} (${fmtAgo(e.timestamp)})`], ['Tsunami flag', m.tsunami ? 'Yes' : undefined], ['PAGER alert', m.alert], ['Felt reports', m.felt]],
+        stats: [['Magnitude', m.mag != null ? `M${Number(m.mag).toFixed(1)}` : undefined], ['Depth', fmtDistance(m.depthKm)], ['When', fmtAgo(e.timestamp)]],
+        rows: [['Time', fmtDate(e.timestamp)], ['Tsunami flag', m.tsunami ? 'Yes' : undefined], ['PAGER alert', m.alert], ['Felt reports', m.felt]],
       };
     case 'disaster':
-      return { subtitle: m.country, rows: [['Hazard', m.hazard], ['Alert level', m.alertLevel], ['Severity', m.severity], ['From', fmtDate(m.from, false)], ['Last update', fmtAgo(e.timestamp)]] };
+      return { subtitle: m.country, stats: [['Alert', m.alertLevel], ['Hazard', m.hazard]], rows: [['Severity', m.severity], ['Since', fmtDate(m.from, false)], ['Last update', fmtAgo(e.timestamp)]] };
     case 'event':
-      return { subtitle: m.category, rows: [['Last observed', fmtAgo(m.lastObserved)], ['Magnitude', m.magnitude], ['Observations', m.observations]] };
+      return { subtitle: m.category, stats: [['Strength', m.magnitude], ['Seen', fmtAgo(m.lastObserved)]], rows: [['Observations', m.observations]] };
     case 'wildfire':
-      return { rows: [['Fire radiative power', u(m.frpMw, 'MW')], ['Brightness', u(m.brightnessK, 'K', 0)], ['Confidence', m.confidence], ['Detected', `${fmtDate(m.detectedAt)} (${m.daynight})`], ['Sensor', m.satellite]] };
+      return { stats: [['Power', u(m.frpMw, 'MW', 0)], ['Confidence', m.confidence], ['Detected', fmtAgo(m.detectedAt)]], rows: [['Brightness', u(m.brightnessK, 'K', 0)], ['Detected at', `${fmtDate(m.detectedAt)} (${m.daynight})`], ['Sensor', m.satellite]] };
     case 'volcano':
-      return { subtitle: [m.region, m.country].filter(Boolean).join(', '), rows: [['Elevation', u(m.elevationM, 'm', 0)], ['Observatory', m.observatory], ['GVP number', m.gvpNumber]] };
+      return { subtitle: [m.region, m.country].filter(Boolean).join(', '), stats: [['Summit', fmtHeight(m.elevationM)]], rows: [['Observatory', m.observatory], ['GVP number', m.gvpNumber]] };
     case 'weather':
       return {
         subtitle: m.conditions,
-        rows: [['Temperature', u(m.temperatureC, '°C')], ['Feels like', u(m.feelsLikeC, '°C')], ['Humidity', u(m.humidityPct, '%', 0)], ['Wind', m.windSpeedMs != null ? `${fmtNum(m.windSpeedMs)} m/s from ${Math.round(m.windDirDeg)}°` : undefined], ['Gusts', u(m.gustMs, 'm/s')], ['Pressure', u(m.pressureHpa, 'hPa', 0)], ['Precipitation', u(m.precipitationMm, 'mm')], ['Observed', fmtAgo(e.timestamp)]],
+        stats: [['Now', fmtTemp(m.temperatureC)], ['Feels like', fmtTemp(m.feelsLikeC)], ['Wind', fmtWind(m.windSpeedMs)]],
+        rows: [['Humidity', u(m.humidityPct, '%', 0)], ['Wind from', u(m.windDirDeg, '°', 0)], ['Gusts', fmtWind(m.gustMs)], ['Pressure', u(m.pressureHpa, 'hPa', 0)], ['Precipitation', u(m.precipitationMm, 'mm')], ['Observed', fmtAgo(e.timestamp)]],
       };
     case 'buoy':
       return {
-        rows: [['Wave height', u(m.waveHeightM, 'm')], ['Wave period', u(m.dominantPeriodS, 's', 0)], ['Wind', m.windSpeedMs != null ? `${fmtNum(m.windSpeedMs)} m/s from ${m.windDirDeg ?? '?'}°` : undefined], ['Gusts', u(m.gustMs, 'm/s')], ['Water temperature', u(m.waterTempC, '°C')], ['Air temperature', u(m.airTempC, '°C')], ['Pressure', u(m.pressureHpa, 'hPa')], ['Observed', fmtAgo(m.observedAt)]],
+        stats: [['Waves', fmtHeight(m.waveHeightM)], ['Water', fmtTemp(m.waterTempC)], ['Wind', fmtWind(m.windSpeedMs)]],
+        rows: [['Wave period', u(m.dominantPeriodS, 's', 0)], ['Wind from', u(m.windDirDeg, '°', 0)], ['Gusts', fmtWind(m.gustMs)], ['Air temperature', fmtTemp(m.airTempC)], ['Pressure', u(m.pressureHpa, 'hPa')], ['Observed', fmtAgo(m.observedAt)]],
       };
     case 'camera':
-      return { subtitle: [m.region || m.route, m.country].filter(Boolean).join(' · '), rows: [['Operator', m.operator], ['Facing', m.view], ['Refreshes', m.refreshSeconds ? `every ${Math.round(m.refreshSeconds / 60)} min` : undefined], ['Licence', m.license]] };
+      return { subtitle: [m.region || m.route, m.country].filter(Boolean).join(' · '), stats: [], rows: [['Operator', m.operator], ['Facing', m.view], ['Refreshes', m.refreshSeconds ? `every ${Math.round(m.refreshSeconds / 60)} min` : undefined], ['Licence', m.license]] };
     case 'launch':
       return {
         subtitle: m.provider,
-        rows: [['Launch window', `${fmtDate(m.net)} (${fmtAgo(m.net)})`], ['Status', m.status], ['Rocket', m.rocket], ['Mission', m.mission], ['Orbit', m.orbit], ['Pad', m.pad], ['Site', m.location]],
+        stats: [['Lift-off', fmtAgo(m.net)], ['Status', m.status]],
+        rows: [['Window opens', fmtDate(m.net)], ['Rocket', m.rocket], ['Mission', m.mission], ['Orbit', m.orbit], ['Pad', m.pad], ['Site', m.location]],
       };
     case 'fireball':
-      return { rows: [['Time', fmtDate(e.timestamp)], ['Radiated energy', m.energy_kt != null ? `${m.energy_kt} ×10¹⁰ J` : undefined], ['Impact energy', u(m.impact_energy_kt, 'kt', 2)], ['Velocity', u(m.velocity_km_s, 'km/s')], ['Altitude', u(m.altitude_km, 'km')]] };
+      return { stats: [['Impact energy', u(m.impact_energy_kt, 'kt', 2)], ['Speed', u(m.velocity_km_s, 'km/s')]], rows: [['Time', fmtDate(e.timestamp)], ['Radiated energy', m.energy_kt != null ? `${m.energy_kt} ×10¹⁰ J` : undefined], ['Altitude', fmtDistance(m.altitude_km)]] };
     case 'powerplant':
     case 'windfarm':
-      return { subtitle: m.country, rows: [['Capacity', u(m.capacityMw, 'MW', 0)], ['Fuel', m.primaryFuel], ['Owner', m.owner], ['Commissioned', m.commissioningYear]] };
+      return { subtitle: m.country, stats: [['Capacity', u(m.capacityMw, 'MW', 0)], ['Fuel', m.primaryFuel]], rows: [['Owner', m.owner], ['Commissioned', m.commissioningYear]] };
     case 'meteorite':
-      return { rows: [['Mass', m.massGrams != null ? (m.massGrams > 1000 ? `${fmtNum(m.massGrams / 1000)} kg` : `${fmtNum(m.massGrams, 0)} g`) : undefined], ['Year', m.year], ['Class', m.recclass], ['Seen falling', m.fall === 'Fell' ? 'Yes' : 'Found later']] };
+      return { stats: [['Mass', m.massGrams != null ? (m.massGrams > 1000 ? `${fmtNum(m.massGrams / 1000)} kg` : `${fmtNum(m.massGrams, 0)} g`) : undefined], ['Year', m.year]], rows: [['Class', m.recclass], ['Seen falling', m.fall === 'Fell' ? 'Yes' : 'Found later']] };
     case 'ixp':
-      return { subtitle: [m.city, m.country].filter(Boolean).join(', '), rows: [['Full name', m.nameLong], ['Connected networks', m.netCount], ['Website', m.website]] };
+      return { subtitle: [m.city, m.country].filter(Boolean).join(', '), stats: [['Networks', m.netCount != null ? fmtNum(m.netCount, 0) : undefined]], rows: [['Full name', m.nameLong], ['Website', m.website]] };
     case 'airport':
-      return { subtitle: [m.city, m.country].filter(Boolean).join(', '), rows: [['IATA', m.iata], ['ICAO', m.icao], ['Elevation', m.altitude != null ? `${m.altitude} ft` : undefined], ['Time zone', m.tz]] };
+      return { subtitle: [m.city, m.country].filter(Boolean).join(', '), stats: [['IATA', m.iata], ['ICAO', m.icao]], rows: [] };
     case 'cable':
-      return { rows: [['Length', u(m.length_km, 'km', 0)], ['In service', m.rfs], ['Owners', m.owners]] };
+      return { stats: [['Length', fmtDistance(m.length_km)]], rows: [['In service', m.rfs], ['Owners', m.owners]] };
     default:
-      return { rows: [] };
+      return { stats: [], rows: [] };
   }
 }
 
@@ -123,7 +126,7 @@ function CameraFrame({ e }: { e: Entity }) {
         {clip && m.videoUrl ? (
           <video src={m.videoUrl} autoPlay muted loop playsInline controls />
         ) : (
-          <img src={src} alt={`Latest image from ${m.name}`} onLoad={() => setState('ok')} onError={() => setState('error')} />
+          <img src={src} width={640} height={400} alt={`Latest image from ${m.name}`} onLoad={() => setState('ok')} onError={() => setState('error')} />
         )}
         {state === 'loading' && !clip && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>}
         {state === 'error' && !clip && (
@@ -162,14 +165,14 @@ function Nearby({ e, onPick }: { e: Entity; onPick: (id: string) => void }) {
   if (!items || !items.length) return null;
   return (
     <section>
-      <h3 className="section-title" style={{ marginBottom: 6 }}>Within 75 km</h3>
+      <h3 className="section-title" style={{ marginBottom: 6 }}>Nearby ({fmtDistance(75)})</h3>
       {items.map((x) => {
         const l = LAYER_BY_ID[x.type as keyof typeof LAYER_BY_ID];
         return (
           <button key={x.id} className="list-button" onClick={() => onPick(x.id)}>
             {l && <Icon path={l.icon} color={l.color} />}
             <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.name}</span>
-            <span className="faint" style={{ fontSize: 13 }}>{fmtNum(x.distanceKm, x.distanceKm < 10 ? 1 : 0)} km</span>
+            <span className="faint" style={{ fontSize: 13 }}>{fmtDistance(x.distanceKm)}</span>
           </button>
         );
       })}
@@ -202,19 +205,20 @@ export function Inspector({ onPick }: { onPick: (id: string) => void }) {
   const m = e.metadata || {};
   const p = livePos || { lat: e.position.lat, lon: e.position.lon, alt: e.position.alt ?? 0 };
   const rows = info.rows.filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== '—');
+  const stats = info.stats.filter(([, v]) => v !== undefined && v !== '' && v !== '—');
   const extra = Object.entries(m).filter(([k, v]) => !HIDE.has(k) && v !== undefined && v !== null && v !== '' && typeof v !== 'object');
   const seed = intelSeed(e);
   const copy = (text: string) => navigator.clipboard?.writeText(text).then(() => toast('Coordinates copied', 'success'));
 
   return (
-    <aside className="inspector panel rise" aria-label={`${l?.noun}: ${displayName(e)}`}>
-      <div className="inspector-head">
+    <aside className="inspector" aria-label={`${l?.noun}: ${displayName(e)}`}>
+      <div className="inspector-head" style={{ display: 'flex', gap: 12, ['--c' as any]: l?.color }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="inspector-kind" style={{ color: l?.color }}>
-            {l && <Icon path={l.icon} size={16} />}
+          <div className="inspector-kind">
+            {l && <span className="swatch" style={{ background: l.color, width: 20, height: 20 }}><Icon path={l.icon} size={13} color="#0b141c" /></span>}
             {l?.noun || e.type}
           </div>
-          <h2 className="panel-title" style={{ overflowWrap: 'anywhere' }}>{displayName(e)}</h2>
+          <h2 className="inspector-title">{displayName(e)}</h2>
           {info.subtitle && <div className="muted" style={{ marginTop: 4 }}>{info.subtitle}</div>}
         </div>
         <button className="icon-btn" aria-label="Close details" onClick={() => setApp({ selectedId: null })}><Icon path={mdiClose} /></button>
@@ -222,7 +226,17 @@ export function Inspector({ onPick }: { onPick: (id: string) => void }) {
       <div className="inspector-body scroll">
         {e.type === 'camera' && m.imageUrl && <CameraFrame e={e} />}
         {e.type === 'launch' && m.imageUrl && (
-          <div className="camera-frame"><img src={m.imageUrl} alt={`${m.rocket || 'Rocket'} for ${m.name}`} loading="lazy" /></div>
+          <div className="camera-frame"><img src={m.imageUrl} width={640} height={400} alt={`${m.rocket || 'Rocket'} for ${m.name}`} loading="lazy" /></div>
+        )}
+        {stats.length > 0 && (
+          <div className="stat-row">
+            {stats.map(([k, v]) => (
+              <div key={k} className="stat">
+                <div className="num">{v}</div>
+                <div className="label">{k}</div>
+              </div>
+            ))}
+          </div>
         )}
         {rows.length > 0 && (
           <dl className="kv">
@@ -247,7 +261,8 @@ export function Inspector({ onPick }: { onPick: (id: string) => void }) {
             <button className="btn btn-sm" onClick={() => { const v = getViewer(); if (v) flyTo(v, p.lat, p.lon, Math.max(p.alt * 3, e.type === 'camera' ? 25000 : 400000)); }}>
               <Icon path={mdiCrosshairsGps} size={16} />Fly here
             </button>
-            <button className="btn btn-sm" onClick={() => copy(`${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`)}><Icon path={mdiContentCopy} size={16} />Copy</button>
+            <button className="btn btn-sm" onClick={() => copy(`${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`)}><Icon path={mdiContentCopy} size={16} />Copy Coordinates</button>
+            <button className="btn btn-sm" onClick={() => navigator.clipboard?.writeText(shareUrl()).then(() => toast('Link copied. It opens this object on the globe.', 'success'))}><Icon path={mdiShareVariantOutline} size={16} />Copy Link</button>
             {m.sourceUrl && <a className="btn btn-sm" href={m.sourceUrl} target="_blank" rel="noreferrer">View at source<Icon path={mdiOpenInNew} size={14} /></a>}
           </div>
         </section>

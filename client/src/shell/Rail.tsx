@@ -1,6 +1,5 @@
-import { mdiLayersOutline, mdiPulse, mdiBroadcast, mdiGraphOutline, mdiHelpCircleOutline, mdiEarth } from '@mdi/js';
+import { mdiLayersOutline, mdiPulse, mdiBroadcast, mdiGraphOutline, mdiHelpCircleOutline, mdiEarth, mdiCogOutline } from '@mdi/js';
 import { Icon } from './Icon';
-import { Logo } from './Logo';
 import { setApp, useApp, Drawer } from '../state';
 import { useLive } from '../lib/live';
 
@@ -30,15 +29,13 @@ export function Rail() {
 
   return (
     <nav className="rail" aria-label="Main">
-      <div className="rail-logo" title="AtlasMesh">
-        <Logo size={34} />
-      </div>
       {item('Globe', mdiEarth, mode === 'globe' && drawer === null, () => setApp({ mode: 'globe', drawer: null }))}
       {item('Layers', mdiLayersOutline, mode === 'globe' && drawer === 'layers', () => openDrawer('layers'))}
       {item('Activity', mdiPulse, mode === 'globe' && drawer === 'activity', () => openDrawer('activity'))}
-      {item('Feeds', mdiBroadcast, mode === 'globe' && drawer === 'feeds', () => openDrawer('feeds'), warn)}
+      {item('Feeds', mdiBroadcast, mode === 'globe' && drawer === 'feeds', () => openDrawer('feeds'), warn, true)}
       {item('Intel', mdiGraphOutline, mode === 'intel', () => setApp({ mode: 'intel', selectedId: null }))}
       <div className="rail-spacer" />
+      {item('Settings', mdiCogOutline, false, () => setApp({ settings: 'general' }))}
       {item('Help', mdiHelpCircleOutline, false, () => setApp({ helpOpen: true }), null, true)}
     </nav>
   );

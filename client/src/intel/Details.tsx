@@ -114,7 +114,7 @@ export function EdgeDetails({ edge, inv, refresh, select }: Common & { edge: Gra
         {edge.confidence.signals.map((s) => (
           <div className="signal" key={s.id}>
             <span>{s.label}</span>
-            <span style={{ color: s.weight > 0 ? 'var(--fact)' : s.weight < 0 ? 'var(--bad)' : 'var(--paper-3)' }}>{s.weight > 0 ? '+' : ''}{Math.round(s.weight * 100)}</span>
+            <span style={{ color: s.weight > 0 ? 'var(--fact)' : s.weight < 0 ? 'var(--bad)' : 'var(--text-3)' }}>{s.weight > 0 ? '+' : ''}{Math.round(s.weight * 100)}</span>
             {s.detail && <span className="muted" style={{ gridColumn: '1 / -1', fontSize: 12.5 }}>{s.detail}</span>}
           </div>
         ))}
@@ -212,7 +212,7 @@ export function NodeDetails({ node, inv, refresh, select, onExpand, jobRunning, 
   return (
     <div className="pad" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', gap: 12 }}>
-        {avatar && <img src={avatar} alt="" width={48} height={48} style={{ borderRadius: node.type === 'account' ? '50%' : 6, flexShrink: 0, background: 'var(--ink-3)' }} referrerPolicy="no-referrer" />}
+        {avatar && <img src={avatar} alt="" width={48} height={48} style={{ borderRadius: node.type === 'account' ? '50%' : 6, flexShrink: 0, background: 'var(--surface-3)' }} referrerPolicy="no-referrer" />}
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: st.color, fontSize: 13, fontWeight: 500 }}>
             <Icon path={st.icon} size={16} />{st.label}{inv.seedIds.includes(node.id) ? ' · starting point' : ''}
@@ -222,7 +222,7 @@ export function NodeDetails({ node, inv, refresh, select, onExpand, jobRunning, 
         </div>
       </div>
 
-      <section className="panel" style={{ padding: 12, boxShadow: 'none', background: 'var(--ink-2)' }}>
+      <section className="panel" style={{ padding: 12, boxShadow: 'none', background: 'var(--surface-2)' }}>
         <h3 className="section-title" style={{ marginBottom: 8 }}>Discover more</h3>
         {conns === null ? (
           <div className="spinner" />

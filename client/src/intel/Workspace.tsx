@@ -8,6 +8,7 @@ import { EdgeDetails, NodeDetails, PathDetails } from './Details';
 import { Dock, DockTab } from './Dock';
 import { osint, pct } from './model';
 import { toast } from '../shell/toast';
+import { confirmAction } from '../shell/confirm';
 import { setApp, useApp } from '../state';
 import { storage } from '../lib/api';
 import './intel.css';
@@ -162,7 +163,7 @@ function WorkspaceInner() {
 
   const remove = async (id: string) => {
     const c = list.find((x) => x.id === id);
-    if (!confirm(`Delete “${c?.title}”? Its graph, evidence and notes are removed permanently.`)) return;
+    if (!(await confirmAction({ title: `Delete “${c?.title}”?`, body: 'Its graph, evidence, notes and reports are removed permanently. This can’t be undone.', confirm: 'Delete Investigation' }))) return;
     await osint.remove(id);
     if (invId === id) setInvId(null);
     loadList();
@@ -264,14 +265,14 @@ function WorkspaceInner() {
               <span><span className="legend-line" />Fact</span>
               <span><span className="legend-line" style={{ borderTopStyle: 'dashed', borderColor: 'var(--inference)' }} />Inference</span>
               <span><span className="legend-line" style={{ borderTopStyle: 'dotted', borderColor: 'var(--hypothesis)' }} />Hypothesis</span>
-              <span><span className="legend-line" style={{ borderColor: 'var(--magenta)' }} />Identity link</span>
+              <span><span className="legend-line" style={{ borderColor: 'var(--accent-line)' }} />Identity link</span>
               <span className="faint">Double-click to discover</span>
             </div>
           </>
         ) : (
           <div className="empty">
             <div style={{ maxWidth: 440 }}>
-              <Icon path={mdiGraphOutline} size={40} color="var(--paper-4)" />
+              <Icon path={mdiGraphOutline} size={40} color="var(--text-4)" />
               <h2 className="panel-title" style={{ margin: '10px 0 6px' }}>Map public information into an evidence graph</h2>
               <p className="muted">Start from a name, handle, email, domain, repository, package or paper. Every link keeps its source, and AtlasMesh marks what a source states, what it infers and what is only a hypothesis.</p>
               {!creating && <button className="btn btn-primary" onClick={() => setCreating(true)}>New investigation</button>}
@@ -338,7 +339,7 @@ function Overview({ inv, select, expand, jobRunning }: { inv: Investigation; sel
           <h3 className="section-title" style={{ marginBottom: 6 }}>Identity links to review</h3>
           {ins.next.reviewIdentity.map((x: any) => (
             <button key={x.edgeId} className="entity-row" onClick={() => select(x.edgeId, 'edge')}>
-              <span className="dot" style={{ background: 'var(--magenta)' }} />
+              <span className="dot" style={{ background: 'var(--accent-line)' }} />
               <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.label}</span>
               <span className="faint" style={{ fontSize: 12 }}>{pct(x.score)}</span>
             </button>

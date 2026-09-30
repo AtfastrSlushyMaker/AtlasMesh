@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { mdiMagnify, mdiMapMarker, mdiGraphOutline, mdiEarth, mdiHelpCircleOutline, mdiPulse } from '@mdi/js';
 import { Icon } from './Icon';
 import { LAYERS, LAYER_BY_ID } from '../lib/layers';
@@ -127,10 +127,12 @@ export function Palette({ onPick }: { onPick: (id: string) => void }) {
     };
   }, [q]);
 
+  // Entity search scans every object on the globe; let typing stay responsive.
+  const deferredQ = useDeferredValue(q);
   const items = useMemo(() => {
-    const term = q.trim().toLowerCase();
+    const term = deferredQ.trim().toLowerCase();
     return [...searchEntities(term, onPick), ...places, ...commands(term)];
-  }, [q, places, onPick]);
+  }, [deferredQ, places, onPick]);
 
   useEffect(() => {
     setActive(0);
@@ -148,13 +150,16 @@ export function Palette({ onPick }: { onPick: (id: string) => void }) {
     <div className="overlay" onMouseDown={close}>
       <div className="palette panel rise" role="dialog" aria-modal="true" aria-label="Search" onMouseDown={(e) => e.stopPropagation()}>
         <div className="palette-input">
-          <Icon path={mdiMagnify} color="var(--paper-3)" />
+          <Icon path={mdiMagnify} color="var(--text-3)" />
           <input
             ref={input}
-            autoFocus
+            autoFocus={window.innerWidth >= 900}
+            name="search"
+            autoComplete="off"
+            spellCheck={false}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Callsign, city, camera, layer…"
+            placeholder="Callsign, city, camera or layer…"
             aria-label="Search"
             aria-controls="palette-list"
             aria-activedescendant={items[active] ? `pi-${active}` : undefined}
@@ -176,7 +181,7 @@ export function Palette({ onPick }: { onPick: (id: string) => void }) {
               <div key={it.key}>
                 {header}
                 <button id={`pi-${i}`} role="option" aria-selected={i === active} className="palette-item" onMouseEnter={() => setActive(i)} onClick={() => run(it)}>
-                  <Icon path={it.icon} color={it.color || 'var(--paper-3)'} />
+                  <Icon path={it.icon} color={it.color || 'var(--text-3)'} />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.title}</div>
                     {it.sub && <div className="muted" style={{ fontSize: 13 }}>{it.sub}</div>}

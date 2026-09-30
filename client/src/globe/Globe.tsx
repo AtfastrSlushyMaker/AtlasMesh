@@ -47,9 +47,8 @@ export function Globe() {
   const lighting = useApp((s) => s.lighting);
   const selectedId = useApp((s) => s.selectedId);
   const mode = useApp((s) => s.mode);
-  const [hover, setHover] = useState<{ x: number; y: number; text: string; sub: string } | null>(null);
-  const [cursor, setCursor] = useState<{ lat: number; lon: number } | null>(null);
-  const [cameraAlt, setCameraAlt] = useState(0);
+  const quality = useApp((s) => s.prefs.quality);
+  const [hover, setHover] = useState<{ x: number; y: number; text: string; sub: string; color?: string } | null>(null);
 
   // Create viewer once
   useEffect(() => {
@@ -87,8 +86,8 @@ export function Globe() {
       const p = v.camera.pickEllipsoid(move.endPosition);
       if (p) {
         const c = Cesium.Cartographic.fromCartesian(p);
-        setCursor({ lat: Cesium.Math.toDegrees(c.latitude), lon: Cesium.Math.toDegrees(c.longitude) });
-      } else setCursor(null);
+        emitCursor({ lat: Cesium.Math.toDegrees(c.latitude), lon: Cesium.Math.toDegrees(c.longitude) });
+      } else emitCursor(null);
       if (now - lastPick < 90) return;
       lastPick = now;
       const picked = v.scene.pick(move.endPosition);
@@ -100,10 +99,10 @@ export function Globe() {
       const id = pickedId(picked);
       const e = id ? entityIndex.get(id) : null;
       v.scene.canvas.style.cursor = e ? 'pointer' : '';
-      setHover(e ? { x: move.endPosition.x, y: move.endPosition.y, text: displayName(e), sub: LAYER_BY_ID[e.type]?.noun || e.type } : null);
+      setHover(e ? { x: move.endPosition.x, y: move.endPosition.y, text: displayName(e), sub: LAYER_BY_ID[e.type]?.noun || e.type, color: LAYER_BY_ID[e.type]?.color } : null);
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
-    const onCam = () => setCameraAlt(v.camera.positionCartographic.height);
+    const onCam = () => emitAlt(v.camera.positionCartographic.height);
     v.camera.changed.addEventListener(onCam);
     v.camera.percentageChanged = 0.05;
     onCam();
@@ -160,7 +159,7 @@ export function Globe() {
     // Read the target's current position each frame: moving layers replace their position property on update.
     const ring = viewer.entities.add({
       position: new Cesium.CallbackPositionProperty((time) => t.position?.getValue(time ?? viewer.clock.currentTime), false) as any,
-      point: { pixelSize: 26, color: Cesium.Color.TRANSPARENT, outlineColor: Cesium.Color.fromCssColorString('#d9468f'), outlineWidth: 2.5, disableDepthTestDistance: 0 },
+      point: { pixelSize: 26, color: Cesium.Color.TRANSPARENT, outlineColor: Cesium.Color.fromCssColorString('#f2c230'), outlineWidth: 3, disableDepthTestDistance: 0 },
     });
     viewer.scene.requestRender();
     return () => {
@@ -169,6 +168,15 @@ export function Globe() {
       viewer.scene.requestRender();
     };
   }, [viewer, selectedId]);
+
+  // Rendering quality from Settings → Globe & map.
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    viewer.useBrowserRecommendedResolution = quality !== 'sharp';
+    viewer.resolutionScale = quality === 'saver' ? 0.75 : 1;
+    viewer.scene.maximumRenderTimeChange = quality === 'saver' ? 2 : quality === 'sharp' ? 0.2 : 0.5;
+    viewer.scene.requestRender();
+  }, [viewer, quality]);
 
   // Pause rendering while the Intel workspace covers the globe.
   useEffect(() => {
@@ -190,36 +198,57 @@ export function Globe() {
 
   return (
     <>
-      <div ref={container} style={{ position: 'absolute', inset: 0 }} aria-label="3D globe" role="application" />
+      <div ref={container} style={{ position: 'absolute', inset: 0 }} aria-label="3D globe. Drag to rotate, scroll to zoom, select an object for details. Use search (/) to find things by keyboard." role="application" />
       {viewer && LAYERS.map((l) => {
         const Comp = LAYER_COMPONENTS[l.id];
         return Comp ? <Comp key={l.id} viewer={viewer} visible={!!visibility[l.id]} /> : null;
       })}
       {hover && (
-        <div
-          className="panel"
-          style={{
-            position: 'absolute',
-            left: hover.x + 14,
-            top: hover.y + 14,
-            padding: '6px 10px',
-            pointerEvents: 'none',
-            zIndex: 15,
-            maxWidth: 280,
-            boxShadow: 'none',
-          }}
-        >
-          <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hover.text}</div>
-          <div className="muted" style={{ fontSize: 12 }}>{hover.sub}</div>
+        <div className="globe-tip" style={{ left: hover.x + 14, top: hover.y + 14, ['--c' as any]: hover.color }}>
+          <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hover.text}</div>
+          <div className="muted" style={{ fontSize: 12.5 }}>{hover.sub}</div>
         </div>
       )}
-      <Readout cursor={cursor} altitude={cameraAlt} />
+      <Readout />
     </>
   );
 }
 
-/** Chart-style neatline readout: cursor position and eye altitude. */
-function Readout({ cursor, altitude }: { cursor: { lat: number; lon: number } | null; altitude: number }) {
+// Cursor and camera height change on every mouse move; keep them out of <Globe>'s
+// state so the 21 layer components don't re-render with them.
+type Cursor = { lat: number; lon: number } | null;
+const readoutListeners = new Set<() => void>();
+let cursorValue: Cursor = null;
+let altValue = 0;
+function emitCursor(c: Cursor) {
+  cursorValue = c;
+  readoutListeners.forEach((l) => l());
+}
+function emitAlt(a: number) {
+  altValue = a;
+  readoutListeners.forEach((l) => l());
+}
+
+/** Cursor position and eye altitude. */
+function Readout() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const l = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        force((n) => n + 1);
+      });
+    };
+    readoutListeners.add(l);
+    return () => {
+      readoutListeners.delete(l);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+  const cursor = cursorValue;
+  const altitude = altValue;
   return (
     <div className="readout" aria-live="off">
       <span>{cursor ? fmtDMS(cursor.lat, cursor.lon) : 'Move over the globe'}</span>

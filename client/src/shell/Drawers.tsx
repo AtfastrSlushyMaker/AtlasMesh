@@ -11,10 +11,10 @@ import type { Entity, SourceInfo } from '../../../shared/entity';
 
 const STATUS_COLOR: Record<SourceInfo['status'], string> = {
   live: 'var(--ok)',
-  pending: 'var(--paper-3)',
+  pending: 'var(--text-3)',
   stale: 'var(--warn)',
   error: 'var(--bad)',
-  disabled: 'var(--paper-4)',
+  disabled: 'var(--text-4)',
 };
 const STATUS_TEXT: Record<SourceInfo['status'], string> = {
   live: 'Live',
@@ -26,7 +26,7 @@ const STATUS_TEXT: Record<SourceInfo['status'], string> = {
 
 function DrawerFrame({ title, children, subtitle }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <aside className="drawer panel rise" aria-label={title}>
+    <aside className="drawer" aria-label={title}>
       <div className="drawer-head">
         <div>
           <h2 className="panel-title">{title}</h2>
@@ -115,12 +115,14 @@ export function LayersDrawer() {
                         : `${src?.provider || ''} · loading`;
               return (
                 <button key={l.id} className="layer-row" data-off={!on} onClick={() => toggle(l.id)} aria-pressed={on} title={l.description}>
-                  <Icon path={l.icon} color={on ? l.color : 'var(--paper-4)'} size={20} />
+                  <span className="swatch" style={{ background: on ? l.color : 'var(--surface-3)' }} aria-hidden>
+                    <Icon path={l.icon} color={on ? '#0b141c' : 'var(--text-3)'} size={15} />
+                  </span>
                   <span style={{ minWidth: 0 }}>
                     <div className="layer-name">{l.label}</div>
                     <div className="layer-meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: on && status && status !== 'live' && status !== 'pending' ? STATUS_COLOR[status] : undefined }}>{meta}</div>
                   </span>
-                  <span className="layer-count">{on && counts[l.id] ? fmtInt(counts[l.id]) : ''}</span>
+                  <span className="layer-count num">{on && counts[l.id] ? fmtInt(counts[l.id]) : ''}</span>
                   <Switch on={on} color={l.color} />
                 </button>
               );
@@ -158,7 +160,7 @@ export function FeedsDrawer() {
                 <span className="chip" style={{ borderColor: STATUS_COLOR[s.status], color: STATUS_COLOR[s.status] }}>{STATUS_TEXT[s.status]}</span>
               </div>
               {(s.note || s.lastError) && (
-                <div style={{ fontSize: 13, marginTop: 6, marginLeft: 28, color: s.lastError && s.status !== 'live' ? 'var(--bad)' : 'var(--paper-3)' }}>
+                <div style={{ fontSize: 13, marginTop: 6, marginLeft: 28, color: s.lastError && s.status !== 'live' ? 'var(--bad)' : 'var(--text-3)' }}>
                   {s.status !== 'live' && s.lastError ? s.lastError : s.note}
                 </div>
               )}

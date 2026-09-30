@@ -6,6 +6,7 @@ import { NODE_STYLE, SEED_TYPES, osint } from './model';
 import type { GraphFilters } from './GraphView';
 import { fmtAgo } from '../lib/format';
 import { toast } from '../shell/toast';
+import { getApp } from '../state';
 
 export function NewInvestigation({ onCreated, initialSeed, onCancel }: { onCreated: (inv: Investigation, autoExpand: boolean) => void; initialSeed?: { value: string; type?: string } | null; onCancel?: () => void }) {
   const [title, setTitle] = useState('');
@@ -27,6 +28,7 @@ export function NewInvestigation({ onCreated, initialSeed, onCancel }: { onCreat
         title: title.trim() || seed.trim(),
         objective: objective.trim(),
         seeds: [{ value: seed.trim(), type: type === 'auto' ? undefined : type }],
+        settings: getApp().prefs.intelDefaults,
       });
       onCreated(inv, auto);
     } catch (err: any) {
@@ -47,11 +49,11 @@ export function NewInvestigation({ onCreated, initialSeed, onCancel }: { onCreat
       </label>
       <label className="field">
         <span>{type === 'auto' ? 'Identifier' : t.label}</span>
-        <input className="input" value={seed} onChange={(e) => setSeed(e.target.value)} placeholder={t.placeholder} autoFocus aria-invalid={!!error} />
+        <input className="input" name="seed" value={seed} onChange={(e) => setSeed(e.target.value)} placeholder={t.placeholder} autoFocus={window.innerWidth >= 900} aria-invalid={!!error} autoComplete="off" spellCheck={false} />
       </label>
       <label className="field">
         <span>Title <span className="faint">(optional)</span></span>
-        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Defaults to the starting point" />
+        <input className="input" name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Defaults to the starting point…" autoComplete="off" />
       </label>
       <label className="field">
         <span>Objective <span className="faint">(optional)</span></span>
@@ -178,14 +180,14 @@ export function EntityPanel({ inv, filters, setFilters, selected, onSelect, onBa
       </div>
       <form onSubmit={addSeed} className="pad" style={{ display: 'flex', gap: 6, paddingTop: 0, paddingBottom: 8 }}>
         <label className="sr-only" htmlFor="addseed">Add a starting point</label>
-        <input id="addseed" className="input" value={seed} onChange={(e) => setSeed(e.target.value)} placeholder="Add username, domain, email…" />
+        <input id="addseed" name="add-seed" className="input" value={seed} onChange={(e) => setSeed(e.target.value)} placeholder="Add username, domain, email…" autoComplete="off" spellCheck={false} />
         <button className="btn" aria-label="Add starting point"><Icon path={mdiPlus} size={18} /></button>
       </form>
 
       <div className="pad" style={{ paddingTop: 0, paddingBottom: 8, display: 'flex', gap: 6 }}>
         <div style={{ position: 'relative', flex: 1 }}>
-          <span style={{ position: 'absolute', left: 9, top: 10 }}><Icon path={mdiMagnify} size={18} color="var(--paper-4)" /></span>
-          <input className="input" style={{ paddingLeft: 32 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find in this investigation" aria-label="Find in this investigation" />
+          <span style={{ position: 'absolute', left: 9, top: 10 }}><Icon path={mdiMagnify} size={18} color="var(--text-4)" /></span>
+          <input className="input" type="search" name="find" style={{ paddingLeft: 32 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find in this investigation…" aria-label="Find in this investigation" autoComplete="off" />
         </div>
         <button className="icon-btn" aria-expanded={showSettings} aria-label="Filters and limits" title="Filters and limits" onClick={() => setShowSettings((s) => !s)} style={{ border: '1px solid var(--line-strong)' }}>
           <Icon path={mdiTune} />
@@ -193,7 +195,7 @@ export function EntityPanel({ inv, filters, setFilters, selected, onSelect, onBa
       </div>
 
       {showSettings && (
-        <div className="pad" style={{ borderTop: '1px solid var(--line)', borderBottom: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 12, background: 'var(--ink-2)' }}>
+        <div className="pad" style={{ borderTop: '1px solid var(--line)', borderBottom: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 12, background: 'var(--surface-2)' }}>
           <div>
             <div className="section-title" style={{ marginBottom: 6 }}>Entity types</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -251,7 +253,7 @@ export function EntityPanel({ inv, filters, setFilters, selected, onSelect, onBa
             <button key={n.id} className="entity-row" role="option" aria-selected={selected.includes(n.id)} onClick={(e) => onSelect(n.id, e.shiftKey)} style={{ opacity: n.hidden ? 0.5 : 1 }}>
               <Icon path={st.icon} size={16} color={st.color} />
               <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: inv.seedIds.includes(n.id) ? 600 : 400 }}>{n.label}</span>
-              {n.pinned && <Icon path={mdiPin} size={14} color="var(--paper-3)" />}
+              {n.pinned && <Icon path={mdiPin} size={14} color="var(--text-3)" />}
               <span className="faint" style={{ fontSize: 12 }}>{degree.get(n.id) || ''}</span>
             </button>
           );

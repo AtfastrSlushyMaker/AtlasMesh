@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import cytoscape, { Core, ElementDefinition } from 'cytoscape';
 import type { GraphEdge, GraphNode, Investigation } from '../../../shared/osint';
 import { NODE_STYLE, relText } from './model';
+import { useApp } from '../state';
 
 export interface GraphFilters {
   types: Set<string>; // hidden node types
@@ -23,7 +24,22 @@ interface Props {
   fitSignal: number;
 }
 
-const HEX = { fact: '#5bc98a', inference: '#5b9bd5', hypothesis: '#e7b24a', magenta: '#d9468f', line: '#4a6178', paper: '#e6e1d3' };
+/** Colours come from the CSS theme tokens so the graph follows Day/Night. */
+function palette() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
+  return {
+    fact: v('--fact', '#1f7a4d'),
+    inference: v('--inference', '#1d5fa8'),
+    hypothesis: v('--hypothesis', '#9a5b00'),
+    magenta: '#e0a800',
+    line: v('--line-strong', '#6d8391'),
+    paper: v('--text', '#10202a'),
+    halo: v('--bg', '#dfe4e7'),
+    bad: v('--bad', '#b3261e'),
+  };
+}
+let HEX = { fact: '#1f7a4d', inference: '#1d5fa8', hypothesis: '#9a5b00', magenta: '#e0a800', line: '#6d8391', paper: '#10202a', halo: '#dfe4e7', bad: '#b3261e' };
 
 /** Which nodes are visible after filters and collapses. */
 export function visibleGraph(inv: Investigation, f: GraphFilters, collapsed: Set<string>) {
@@ -106,7 +122,7 @@ function toElements(inv: Investigation, nodes: GraphNode[], edges: GraphEdge[], 
   return els;
 }
 
-const STYLE: any[] = [
+const buildStyle = (): any[] => [
   {
     selector: 'node',
     style: {
@@ -120,12 +136,12 @@ const STYLE: any[] = [
       'font-size': 11,
       'text-valign': 'bottom',
       'text-margin-y': 5,
-      'text-outline-color': '#09121a',
+      'text-outline-color': HEX.halo,
       'text-outline-width': 2.5,
       'text-max-width': '140px',
       'text-wrap': 'ellipsis',
       'border-width': 1.5,
-      'border-color': '#09121a',
+      'border-color': HEX.paper,
       'min-zoomed-font-size': 7,
     },
   },
@@ -147,7 +163,7 @@ const STYLE: any[] = [
       'font-family': 'Barlow, sans-serif',
       'font-size': 10,
       color: HEX.paper,
-      'text-outline-color': '#09121a',
+      'text-outline-color': HEX.halo,
       'text-outline-width': 2,
       'text-rotation': 'autorotate',
     },
@@ -155,7 +171,7 @@ const STYLE: any[] = [
   { selector: 'edge[claim = "INFERENCE"]', style: { 'line-style': 'dashed', 'line-dash-pattern': [7, 4] } },
   { selector: 'edge[claim = "HYPOTHESIS"]', style: { 'line-style': 'dotted' } },
   { selector: 'edge[review = "verified"]', style: { 'line-style': 'solid' } },
-  { selector: 'edge[review = "rejected"]', style: { 'line-color': '#e5534b', opacity: 0.4 } },
+  { selector: 'edge[review = "rejected"]', style: { 'line-color': HEX.bad, opacity: 0.4 } },
   { selector: 'edge:selected, edge.hover', style: { label: 'data(label)', opacity: 1, 'z-index': 10 } },
   { selector: 'node:selected', style: { 'border-width': 4, 'border-color': HEX.magenta, 'overlay-opacity': 0 } },
   { selector: 'edge:selected', style: { 'line-color': HEX.magenta, 'target-arrow-color': HEX.magenta } },
@@ -175,9 +191,10 @@ export function GraphView({ inv, filters, selected, highlight, collapsed, onSele
 
   useEffect(() => {
     if (!host.current) return;
+    HEX = palette();
     const cy = cytoscape({
       container: host.current,
-      style: STYLE,
+      style: buildStyle(),
       wheelSensitivity: 0.25,
       minZoom: 0.08,
       maxZoom: 3,
@@ -222,6 +239,12 @@ export function GraphView({ inv, filters, selected, highlight, collapsed, onSele
       });
     });
     const added: string[] = [];
+    // Neighbour lookup for placing new nodes; built once instead of scanning edges per node.
+    const nbrs = new Map<string, string[]>();
+    for (const e of Object.values(inv.edges)) {
+      (nbrs.get(e.from) ?? nbrs.set(e.from, []).get(e.from)!).push(e.to);
+      (nbrs.get(e.to) ?? nbrs.set(e.to, []).get(e.to)!).push(e.from);
+    }
     cy.batch(() => {
       for (const el of els) {
         const existing = cy.getElementById(el.data.id as string);
@@ -231,8 +254,8 @@ export function GraphView({ inv, filters, selected, highlight, collapsed, onSele
         }
         if (el.group === 'nodes') {
           // Start new nodes next to an existing neighbour so the layout settles locally.
-          const nb = Object.values(inv.edges).find((e) => (e.from === el.data.id || e.to === el.data.id) && cy.getElementById(e.from === el.data.id ? e.to : e.from).nonempty());
-          const anchor = nb ? cy.getElementById(nb.from === el.data.id ? nb.to : nb.from).position() : { x: 0, y: 0 };
+          const nb = (nbrs.get(el.data.id as string) || []).find((id) => cy.getElementById(id).nonempty());
+          const anchor = nb ? cy.getElementById(nb).position() : { x: 0, y: 0 };
           el.position = { x: anchor.x + (Math.random() - 0.5) * 120, y: anchor.y + (Math.random() - 0.5) * 120 };
           added.push(el.data.id as string);
         }
@@ -283,6 +306,18 @@ export function GraphView({ inv, filters, selected, highlight, collapsed, onSele
       if (col.length) cy.animate({ fit: { eles: col, padding: 120 }, duration: 400 } as any);
     }
   }, [highlight, inv]);
+
+  // Re-read theme colours when Day/Night changes.
+  const theme = useApp((st) => st.prefs.theme);
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    const t = setTimeout(() => {
+      HEX = palette();
+      cy.style(buildStyle());
+    }, 30);
+    return () => clearTimeout(t);
+  }, [theme]);
 
   useEffect(() => {
     if (fitSignal) cyRef.current?.animate({ fit: { eles: cyRef.current.elements(), padding: 50 }, duration: 350 } as any);

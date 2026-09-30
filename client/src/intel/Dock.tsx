@@ -151,7 +151,7 @@ function Contradictions({ inv, onCite, onHighlight, refresh }: Pick<Props, 'inv'
         <div key={c.id} className="evidence" style={{ opacity: c.status === 'dismissed' ? 0.5 : 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
             <strong style={{ textTransform: 'capitalize' }}>{c.kind}</strong>
-            <span className="chip" style={{ color: c.status === 'unresolved' ? 'var(--bad)' : 'var(--paper-3)' }}>{c.status === 'temporal' ? 'Explained by dates' : c.status}</span>
+            <span className="chip" style={{ color: c.status === 'unresolved' ? 'var(--bad)' : 'var(--text-3)' }}>{c.status === 'temporal' ? 'Explained by dates' : c.status}</span>
           </div>
           <p style={{ margin: '6px 0' }}>{c.description}</p>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -217,7 +217,7 @@ function Log({ inv, job, onCancel }: Pick<Props, 'inv' | 'job' | 'onCancel'>) {
         return (
           <div key={j.id} style={{ marginBottom: 10 }}>
             <button className="entity-row" onClick={() => setOpen(open === j.id ? null : j.id)} aria-expanded={open === j.id}>
-              <span className="dot" style={{ background: live.status === 'running' ? 'var(--magenta)' : live.status === 'done' ? 'var(--ok)' : live.status === 'failed' ? 'var(--bad)' : 'var(--paper-3)' }} />
+              <span className="dot" style={{ background: live.status === 'running' ? 'var(--accent-line)' : live.status === 'done' ? 'var(--ok)' : live.status === 'failed' ? 'var(--bad)' : 'var(--text-3)' }} />
               <span style={{ flex: 1 }}>{inv.nodes[j.seedNodeId]?.label || 'Entity'} · {live.status}</span>
               <span className="faint" style={{ fontSize: 12 }}>+{live.nodesAdded} entities · {live.requests} requests · {fmtAgo(j.startedAt)}</span>
             </button>
@@ -225,7 +225,7 @@ function Log({ inv, job, onCancel }: Pick<Props, 'inv' | 'job' | 'onCancel'>) {
             {open === j.id && (
               <ol style={{ listStyle: 'none', margin: '6px 0 0 24px', padding: 0, fontSize: 13 }}>
                 {live.log.map((l: any, i: number) => (
-                  <li key={i} style={{ color: l.level === 'warn' ? 'var(--warn)' : l.level === 'error' ? 'var(--bad)' : 'var(--paper-2)', padding: '2px 0' }}>
+                  <li key={i} style={{ color: l.level === 'warn' ? 'var(--warn)' : l.level === 'error' ? 'var(--bad)' : 'var(--text-2)', padding: '2px 0' }}>
                     <span className="faint">{new Date(l.at).toLocaleTimeString()} </span>{l.message}
                   </li>
                 ))}
