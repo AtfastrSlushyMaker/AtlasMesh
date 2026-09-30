@@ -10,28 +10,31 @@ export type Overlay = 'labels' | 'radar' | 'clouds' | 'nightlights';
 
 export const BASEMAPS: Array<{ id: Basemap; label: string; attribution: string }> = [
   { id: 'satellite', label: 'Satellite', attribution: 'Esri, Maxar, Earthstar Geographics' },
-  { id: 'dark', label: 'Dark', attribution: '© OpenStreetMap contributors © CARTO' },
-  { id: 'light', label: 'Light', attribution: '© OpenStreetMap contributors © CARTO' },
+  { id: 'dark', label: 'Dark', attribution: 'Esri, HERE, Garmin, © OpenStreetMap contributors' },
+  { id: 'light', label: 'Light', attribution: 'Esri, HERE, Garmin, © OpenStreetMap contributors' },
   { id: 'terrain', label: 'Topographic', attribution: 'Esri, HERE, Garmin, USGS' },
 ];
 
 export const OVERLAYS: Array<{ id: Overlay; label: string; description: string; attribution: string }> = [
-  { id: 'labels', label: 'Place names', description: 'Country, city and road labels', attribution: '© CARTO' },
+  { id: 'labels', label: 'Place names', description: 'Country, city and boundary labels', attribution: 'Esri' },
   { id: 'radar', label: 'Rain radar', description: 'Latest precipitation radar mosaic, refreshed every 10 minutes', attribution: 'RainViewer' },
   { id: 'clouds', label: 'Yesterday from orbit', description: 'MODIS true-colour imagery from the previous day', attribution: 'NASA GIBS / MODIS Terra' },
   { id: 'nightlights', label: 'City lights', description: 'VIIRS Black Marble night-time lights', attribution: 'NASA GIBS / VIIRS' },
 ];
 
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
+
 function basemapProvider(id: Basemap) {
   switch (id) {
+    // CARTO basemaps now require an API key (they return watermark tiles), so these use Esri Canvas.
     case 'dark':
-      return new Cesium.UrlTemplateImageryProvider({ url: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png', subdomains: 'abcd', maximumLevel: 18, credit: 'CARTO' });
+      return new Cesium.UrlTemplateImageryProvider({ url: `${ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`, maximumLevel: 16, credit: 'Esri' });
     case 'light':
-      return new Cesium.UrlTemplateImageryProvider({ url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png', subdomains: 'abcd', maximumLevel: 18, credit: 'CARTO' });
+      return new Cesium.UrlTemplateImageryProvider({ url: `${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`, maximumLevel: 16, credit: 'Esri' });
     case 'terrain':
-      return new Cesium.UrlTemplateImageryProvider({ url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', maximumLevel: 18, credit: 'Esri' });
+      return new Cesium.UrlTemplateImageryProvider({ url: `${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`, maximumLevel: 18, credit: 'Esri' });
     default:
-      return new Cesium.UrlTemplateImageryProvider({ url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maximumLevel: 18, credit: 'Esri' });
+      return new Cesium.UrlTemplateImageryProvider({ url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`, maximumLevel: 18, credit: 'Esri' });
   }
 }
 
@@ -44,10 +47,14 @@ async function overlayProvider(id: Overlay, basemap: Basemap): Promise<Cesium.Im
   switch (id) {
     case 'labels':
       return new Cesium.UrlTemplateImageryProvider({
-        url: `https://{s}.basemaps.cartocdn.com/${basemap === 'light' || basemap === 'terrain' ? 'light_only_labels' : 'dark_only_labels'}/{z}/{x}/{y}.png`,
-        subdomains: 'abcd',
-        maximumLevel: 18,
-        credit: 'CARTO',
+        url:
+          basemap === 'dark'
+            ? `${ESRI}/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`
+            : basemap === 'light'
+              ? `${ESRI}/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}`
+              : `${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`,
+        maximumLevel: 16,
+        credit: 'Esri',
       });
     case 'radar': {
       const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
@@ -111,7 +118,9 @@ export function createViewer(container: HTMLElement) {
   ctrl.maximumZoomDistance = 60_000_000;
   ctrl.inertiaSpin = 0.9;
   ctrl.inertiaTranslate = 0.9;
-  ctrl.inertiaZoom = 0.75;
+  ctrl.inertiaZoom = 0.6;
+  // Cesium's default (5) jumps orders of magnitude per wheel notch.
+  (ctrl as any)._zoomFactor = 2.5;
   viewer.clock.shouldAnimate = true;
   viewer.clock.clockRange = Cesium.ClockRange.UNBOUNDED;
   viewer.clock.currentTime = Cesium.JulianDate.now();
