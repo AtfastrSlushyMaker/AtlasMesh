@@ -85,36 +85,60 @@ export async function safeFetchPage(raw: string, maxBytes = 1.5 * 1024 * 1024) {
   throw new SafetyError('Too many redirects');
 }
 
-const robotsCache = new Map<string, { at: number; disallow: string[] }>();
+const robotsCache = new Map<string, { at: number; allow: RegExp[]; disallow: RegExp[] }>();
 
-/** Minimal robots.txt check for the "*" user agent and our own agent token. */
+/** robots.txt path pattern → RegExp ("*" wildcard, "$" end anchor). */
+function robotsPattern(p: string) {
+  const anchored = p.endsWith('$');
+  const body = (anchored ? p.slice(0, -1) : p).replace(/[.+?^{}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(`^${body}${anchored ? '$' : ''}`);
+}
+
+/** robots.txt check for "*" and our own agent token, with Allow/Disallow precedence by specificity. */
 export async function robotsAllows(raw: string): Promise<boolean> {
   const url = new URL(raw);
   const origin = url.origin;
   let entry = robotsCache.get(origin);
   if (!entry || Date.now() - entry.at > 6 * 60 * 60 * 1000) {
-    const disallow: string[] = [];
+    const allow: RegExp[] = [];
+    const disallow: RegExp[] = [];
     try {
       await assertPublicUrl(`${origin}/robots.txt`);
-      const res = await client.get(`${origin}/robots.txt`, { responseType: 'text', timeout: 8000, maxRedirects: 2, validateStatus: () => true });
+      const res = await client.get(`${origin}/robots.txt`, { responseType: 'text', timeout: 8000, maxRedirects: 3, validateStatus: () => true });
       if (res.status < 400) {
-        let applies = false;
-        for (const line of String(res.data).split('\n')) {
-          const [k, ...rest] = line.split(':');
-          const key = k.trim().toLowerCase();
-          const val = rest.join(':').trim();
-          if (key === 'user-agent') applies = val === '*' || /atlasmesh/i.test(val);
-          else if (applies && key === 'disallow' && val) disallow.push(val);
+        let agents: string[] = [];
+        let inRules = false;
+        for (const rawLine of String(res.data).split('\n')) {
+          const line = rawLine.replace(/#.*/, '').trim();
+          if (!line) continue;
+          const i = line.indexOf(':');
+          if (i < 0) continue;
+          const key = line.slice(0, i).trim().toLowerCase();
+          const val = line.slice(i + 1).trim();
+          if (key === 'user-agent') {
+            // Consecutive user-agent lines form one group.
+            if (inRules) agents = [];
+            inRules = false;
+            agents.push(val.toLowerCase());
+            continue;
+          }
+          if (key !== 'allow' && key !== 'disallow') continue;
+          inRules = true;
+          const applies = agents.some((a) => a === '*' || a.includes('atlasmesh'));
+          if (!applies || !val) continue;
+          (key === 'allow' ? allow : disallow).push(robotsPattern(val));
         }
       }
     } catch {
-      // unreachable robots.txt → treat as allowed, the page fetch will still be SSRF-checked
+      // unreachable robots.txt → treat as allowed; the page fetch is still SSRF-checked
     }
-    entry = { at: Date.now(), disallow };
+    entry = { at: Date.now(), allow, disallow };
     robotsCache.set(origin, entry);
   }
-  const path = url.pathname || '/';
-  return !entry.disallow.some((d) => path.startsWith(d.replace(/\*.*$/, '')));
+  const path = (url.pathname || '/') + url.search;
+  const longest = (list: RegExp[]) => Math.max(-1, ...list.filter((r) => r.test(path)).map((r) => r.source.length));
+  // The most specific matching rule wins; ties go to Allow.
+  return longest(entry.allow) >= longest(entry.disallow);
 }
 
 const PHONE = /(?:\+?\d[\d\s().-]{7,}\d)/g;

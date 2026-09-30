@@ -196,7 +196,7 @@ export function finalize(inv: Investigation, text: string, mode: 'llm' | 'rules'
 
 const cite = (kind: 'N' | 'E' | 'V', id: string) => `[${kind}:${id}]`;
 const edgeLine = (inv: Investigation, e: GraphEdge) =>
-  `${inv.nodes[e.from]?.label} ${cite('N', e.from)} **${e.type}** ${inv.nodes[e.to]?.label} ${cite('N', e.to)} — ${e.claim}, ${e.confidence.level} (${Math.round(e.confidence.score * 100)}%) ${cite('E', e.id)}`;
+  `${inv.nodes[e.from]?.label} ${cite('N', e.from)} ${e.type.toLowerCase().replace(/_/g, ' ')} ${inv.nodes[e.to]?.label} ${cite('N', e.to)} — **${e.claim}**, ${e.confidence.level} confidence (${Math.round(e.confidence.score * 100)}%) ${cite('E', e.id)}`;
 
 export function rulesAnswer(inv: Investigation, question: string, focus: string[] = []): AnalystAnswer {
   const q = question.toLowerCase();
@@ -268,7 +268,7 @@ export function rulesAnswer(inv: Investigation, question: string, focus: string[
       if (!rels.length) lines.push('Nothing found yet. Expand this entity to query sources.');
     }
   }
-  lines.push('\n_Rules-based analyst. Set DEEPSEEK_API_KEY on the server for free-form questions._');
+  lines.push('\n_Rules-based analyst. Set `DEEPSEEK_API_KEY` on the server for free-form questions._');
   return finalize(inv, lines.join('\n'), 'rules');
 }
 

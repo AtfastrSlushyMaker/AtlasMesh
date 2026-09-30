@@ -11,7 +11,7 @@ import { finalize, llmSummary } from './analyst';
 export async function buildReport(inv: Investigation) {
   const N = (id: string) => `${inv.nodes[id]?.label ?? id} [N:${id}]`;
   const line = (e: GraphEdge) =>
-    `- ${N(e.from)} — ${e.type.replace(/_/g, ' ').toLowerCase()} — ${N(e.to)}${e.validFrom ? ` (${e.validFrom}${e.validTo ? ` – ${e.validTo}` : ''})` : ''} · ${e.claim}, ${e.confidence.level} ${Math.round(e.confidence.score * 100)}% [E:${e.id}]`;
+    `- ${N(e.from)} — ${e.type.replace(/_/g, ' ').toLowerCase()} — ${N(e.to)}${e.validFrom ? ` (${e.validFrom}${e.validTo ? ` – ${e.validTo}` : ''})` : ''} · **${e.claim}**, ${e.confidence.level} ${Math.round(e.confidence.score * 100)}% [E:${e.id}]`;
 
   const live = Object.values(inv.edges).filter((e) => e.review !== 'rejected');
   const st = stats(inv);
