@@ -26,6 +26,7 @@ import { startAirportSource } from '../sources/airports';
 import { startCameraSource } from '../sources/cameras';
 import { startDisasterSource } from '../sources/disasters';
 import { startBuoySource } from '../sources/buoys';
+import { osintRouter } from '../osint/routes';
 
 const VERSION = '2.1.0';
 const MIN = 60 * 1000;
@@ -133,6 +134,8 @@ app.get('/api/near', (req, res) => {
   }));
   res.json({ count: results.length, results });
 });
+
+app.use('/api/osint', osintRouter);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Unknown API route' }));
 
