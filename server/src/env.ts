@@ -5,3 +5,7 @@ import dotenv from 'dotenv';
 // Looks for .env in the server directory, then the repository root.
 dotenv.config({ quiet: true } as any);
 dotenv.config({ path: path.resolve(process.cwd(), '..', '.env'), quiet: true } as any);
+
+// Values saved from the Settings screen (data/settings.json) fill in anything not set above.
+import { loadSettings } from '../services/config';
+loadSettings();

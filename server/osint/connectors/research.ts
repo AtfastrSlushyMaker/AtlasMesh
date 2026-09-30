@@ -213,7 +213,9 @@ export const semanticScholarConnector: Connector = {
   description: 'Author candidates with affiliations, h-index and top papers.',
   accepts: ['person'],
   reliability: 0.8,
-  minIntervalMs: process.env.S2_API_KEY ? 1100 : 3500,
+  get minIntervalMs() {
+    return process.env.S2_API_KEY ? 1100 : 3500;
+  },
   optionalEnv: ['S2_API_KEY'],
   async run(node, ctx) {
     const out = empty();

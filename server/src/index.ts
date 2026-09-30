@@ -27,6 +27,10 @@ import { startCameraSource } from '../sources/cameras';
 import { startDisasterSource } from '../sources/disasters';
 import { startBuoySource } from '../sources/buoys';
 import { osintRouter } from '../osint/routes';
+import { analystAvailable } from '../osint/analyst';
+import { settingsSummary, updateSettings } from '../services/config';
+import { testSetting } from '../services/settingsTest';
+import { accessKey, canEditSettings } from '../lib/access';
 
 const VERSION = '2.1.0';
 const MIN = 60 * 1000;
@@ -66,8 +70,8 @@ app.use((req, res, next) => {
   if (origin && (allowed.includes(origin) || process.env.NODE_ENV !== 'production')) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-atlas-key');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
@@ -136,6 +140,9 @@ app.get('/api/near', (req, res) => {
 });
 
 app.use('/api/osint', osintRouter);
+// Handlers are attached further down, next to the source lifecycle they control.
+const settingsRouter = express.Router();
+app.use('/api/settings', settingsRouter);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Unknown API route' }));
 
@@ -243,7 +250,7 @@ interface SourceEntry extends SourceDef {
 
 const SOURCES: SourceEntry[] = [
   { id: 'aircraft', type: 'aircraft', label: 'Aircraft', provider: 'OpenSky Network', url: 'https://opensky-network.org', refreshMs: isAircraftAuthenticated() ? MIN : 15 * MIN, start: startAircraftSource, retention: { mode: 'snapshot', graceMs: 20 * MIN },
-    note: isAircraftAuthenticated() ? undefined : 'Anonymous access refreshes about every 15 minutes. Add OpenSky API credentials for 1-minute updates.' },
+    noteFn: () => (isAircraftAuthenticated() ? undefined : 'Anonymous access refreshes about every 15 minutes. Add OpenSky credentials in Settings for 1-minute updates.') } as any,
   { id: 'ship', type: 'ship', label: 'Ships', provider: 'AISStream', url: 'https://aisstream.io', refreshMs: MIN, requires: ['AISSTREAM_TOKEN'], start: startAISSource, retention: { mode: 'stream', ttlMs: 30 * MIN } },
   { id: 'satellite', type: 'satellite', label: 'Satellites', provider: 'Celestrak', url: 'https://celestrak.org', refreshMs: 3 * HOUR, start: startSatellitesSource },
   { id: 'starlink', type: 'starlink', label: 'Starlink', provider: 'Celestrak', url: 'https://celestrak.org', refreshMs: 3 * HOUR, start: startStarlinkSource },
@@ -284,15 +291,18 @@ console.warn = (...args: any[]) => {
 
 console.log(`\nAtlasMesh server ${VERSION}\n`);
 
-for (const s of SOURCES) {
-  const missing = sources.register(s);
-  if (s.retention) store.setRetention(s.type, s.retention);
+const running = new Map<string, () => void>();
+
+function startSource(s: SourceEntry) {
+  const missing = sources.refresh(s.id);
   if (missing.length) {
     console.log(`  - ${s.label}: disabled (set ${missing.join(', ')})`);
-    continue;
+    return;
   }
   try {
-    s.start((entities) => {
+    const stop = s.start((entities) => {
+      // Ignore late callbacks from a stopped instance.
+      if (running.get(s.id) !== stop) return;
       try {
         const diff = store.processForType(s.type, entities);
         sources.reportData(s.id, store.count(s.type));
@@ -301,13 +311,70 @@ for (const s of SOURCES) {
         sources.reportError(s.id, err?.message || String(err));
         console.warn(`[Store] Error processing ${s.type}:`, err?.message);
       }
-    });
+    }) as (() => void) | undefined;
+    running.set(s.id, stop || (() => {}));
     console.log(`  + ${s.label} (${s.provider})`);
   } catch (err: any) {
     sources.reportError(s.id, err?.message || String(err));
     console.warn(`  ! ${s.label} failed to start:`, err?.message || err);
   }
 }
+
+/** Stop and start a source so it picks up new settings. */
+function restartSource(id: string) {
+  const s = SOURCES.find((x) => x.id === id);
+  if (!s) return;
+  try {
+    running.get(id)?.();
+  } catch {
+    // already stopped
+  }
+  running.delete(id);
+  startSource(s);
+}
+
+for (const s of SOURCES) {
+  sources.register(s);
+  if (s.retention) store.setRetention(s.type, s.retention);
+  startSource(s);
+}
+
+// ===== Settings =====
+settingsRouter.get('/', (req, res) => {
+  const editable = canEditSettings(req);
+  res.json({
+    canEdit: editable,
+    reason: editable ? null : accessKey() ? 'Enter the workspace access key to change settings.' : 'Settings can only be changed from the computer running the server, or after an access key is set there.',
+    settings: settingsSummary(),
+    services: { llm: analystAvailable(), aircraftAuthenticated: isAircraftAuthenticated(), ships: !!process.env.AISSTREAM_TOKEN },
+  });
+});
+
+settingsRouter.put('/', (req, res) => {
+  if (!canEditSettings(req)) return res.status(403).json({ error: 'You can\'t change settings from here. Use the computer running the server, or enter the access key.' });
+  const values = req.body?.values;
+  if (!values || typeof values !== 'object') return res.status(400).json({ error: 'Nothing to save' });
+  try {
+    const { changed, restart } = updateSettings(values);
+    restart.forEach(restartSource);
+    res.json({ changed, restarted: restart, settings: settingsSummary() });
+  } catch (err: any) {
+    res.status(500).json({ error: `Settings could not be saved: ${err?.message}` });
+  }
+});
+
+settingsRouter.post('/test', async (req, res) => {
+  if (!canEditSettings(req)) return res.status(403).json({ error: 'Not allowed from here' });
+  const key = String(req.body?.key || '');
+  const value = typeof req.body?.value === 'string' && req.body.value.trim() ? req.body.value.trim() : process.env[key];
+  if (!value) return res.json({ ok: false, message: 'Enter a value first.' });
+  try {
+    res.json(await testSetting(key, value, req.body?.pair));
+  } catch (err: any) {
+    const status = err?.response?.status;
+    res.json({ ok: false, message: status === 401 || status === 403 ? 'The service rejected this key.' : status ? `The service answered HTTP ${status}.` : err?.message || 'Test failed' });
+  }
+});
 
 // ===== Graceful shutdown =====
 function shutdown(signal: string) {

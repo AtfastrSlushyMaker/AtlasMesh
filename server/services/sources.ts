@@ -36,6 +36,16 @@ class SourceRegistry {
     return missing;
   }
 
+  /** Re-evaluate required env vars (after Settings change). Returns missing keys. */
+  refresh(id: string) {
+    const s = this.states.get(id);
+    if (!s) return [];
+    const missing = (s.def.requires ?? []).filter((k) => !process.env[k]);
+    s.disabled = missing.length > 0;
+    s.lastError = null;
+    return missing;
+  }
+
   reportData(id: string, count: number) {
     const s = this.states.get(id);
     if (!s) return;
@@ -68,8 +78,8 @@ class SourceRegistry {
         lastUpdate: s.lastUpdate,
         lastError: s.lastError,
         note: s.disabled
-          ? `Set ${(s.def.requires ?? []).join(', ')} to enable`
-          : s.def.note,
+          ? `Add ${(s.def.requires ?? []).join(', ')} in Settings to turn this on`
+          : typeof (s.def as any).noteFn === 'function' ? (s.def as any).noteFn() : s.def.note,
       };
     });
   }

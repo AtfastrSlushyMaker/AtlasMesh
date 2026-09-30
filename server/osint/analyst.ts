@@ -13,8 +13,8 @@ import { connectorsFor } from './connectors';
  * analyst answers the common question shapes deterministically.
  */
 
-const API_URL = (process.env.LLM_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '') + '/chat/completions';
-const MODEL = process.env.LLM_MODEL || 'deepseek-chat';
+const apiUrl = () => (process.env.LLM_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '') + '/chat/completions';
+const model = () => process.env.LLM_MODEL || 'deepseek-chat';
 const key = () => process.env.DEEPSEEK_API_KEY || process.env.LLM_API_KEY;
 
 export const analystAvailable = () => !!key();
@@ -138,8 +138,8 @@ export async function ask(inv: Investigation, question: string, focus?: string[]
 
   for (let round = 0; round < 6; round++) {
     const res = await client.post(
-      API_URL,
-      { model: MODEL, messages, tools, temperature: 0.2, max_tokens: 1400 },
+      apiUrl(),
+      { model: model(), messages, tools, temperature: 0.2, max_tokens: 1400 },
       { headers: { Authorization: `Bearer ${key()}`, 'Content-Type': 'application/json' }, timeout: 90000 }
     );
     const msg = res.data?.choices?.[0]?.message;
@@ -160,7 +160,7 @@ export async function ask(inv: Investigation, question: string, focus?: string[]
     }
   }
   messages.push({ role: 'user', content: 'Answer now with what you have, with citations.' });
-  const res = await client.post(API_URL, { model: MODEL, messages, temperature: 0.2, max_tokens: 1200 }, { headers: { Authorization: `Bearer ${key()}` }, timeout: 90000 });
+  const res = await client.post(apiUrl(), { model: model(), messages, temperature: 0.2, max_tokens: 1200 }, { headers: { Authorization: `Bearer ${key()}` }, timeout: 90000 });
   return finalize(inv, res.data?.choices?.[0]?.message?.content || '', 'llm', trace);
 }
 
@@ -276,9 +276,9 @@ export async function llmSummary(inv: Investigation, reportContext: string): Pro
   if (!analystAvailable()) return null;
   try {
     const res = await client.post(
-      API_URL,
+      apiUrl(),
       {
-        model: MODEL,
+        model: model(),
         temperature: 0.2,
         max_tokens: 700,
         messages: [

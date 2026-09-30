@@ -27,7 +27,9 @@ export const githubConnector: Connector = {
     n.type === 'organization' ? !!n.attributes.githubLogin?.length :
     isGithubAccount(n),
   reliability: 0.9,
-  minIntervalMs: process.env.GITHUB_TOKEN ? 250 : 1500,
+  get minIntervalMs() {
+    return process.env.GITHUB_TOKEN ? 250 : 1500;
+  },
   optionalEnv: ['GITHUB_TOKEN'],
 
   async run(node, ctx) {

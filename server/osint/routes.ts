@@ -10,6 +10,7 @@ import { rescoreAll } from './confidence';
 import { detectContradictions } from './analysis';
 import { ask, analystAvailable } from './analyst';
 import { buildReport } from './report';
+import { accessKey, hasKey } from '../lib/access';
 
 /**
  * Investigation workspace API. Mounted at /api/osint.
@@ -22,15 +23,14 @@ export const osintRouter = express.Router();
  * the server can run investigations (and spend the LLM key), so production
  * deployments should set it.
  */
-const ACCESS_KEY = process.env.OSINT_ACCESS_KEY;
-if (!ACCESS_KEY && process.env.NODE_ENV === 'production') {
+if (!accessKey() && process.env.NODE_ENV === 'production') {
   console.warn('[osint] OSINT_ACCESS_KEY is not set: the Intel workspace is open to anyone who can reach this server.');
 }
 osintRouter.get('/access', (req, res) => {
-  res.json({ required: !!ACCESS_KEY, ok: !ACCESS_KEY || req.get('x-atlas-key') === ACCESS_KEY });
+  res.json({ required: !!accessKey(), ok: hasKey(req) });
 });
 osintRouter.use((req, res, next) => {
-  if (!ACCESS_KEY || req.get('x-atlas-key') === ACCESS_KEY) return next();
+  if (hasKey(req)) return next();
   res.status(401).json({ error: 'This workspace needs an access key.', code: 'access_key' });
 });
 
