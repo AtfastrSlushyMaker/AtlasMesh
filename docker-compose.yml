@@ -1,0 +1,23 @@
+# docker compose up -d   →   http://localhost:3000
+services:
+  atlasmesh:
+    image: ghcr.io/atfastrslushymaker/atlasmesh:latest
+    build: .
+    ports:
+      # Local only. Remove "127.0.0.1:" to reach it from your network, and set
+      # OSINT_ACCESS_KEY below if you do.
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - atlasmesh-data:/app/server/data
+    environment:
+      # Optional: keys can also be added in the app under Settings → API keys.
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - AISSTREAM_TOKEN=${AISSTREAM_TOKEN:-}
+      - OPENSKY_CLIENT_ID=${OPENSKY_CLIENT_ID:-}
+      - OPENSKY_CLIENT_SECRET=${OPENSKY_CLIENT_SECRET:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - OSINT_ACCESS_KEY=${OSINT_ACCESS_KEY:-}
+    restart: unless-stopped
+
+volumes:
+  atlasmesh-data:

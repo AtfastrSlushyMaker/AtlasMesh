@@ -30,21 +30,38 @@ Real sources only. No mock data; when a feed is down the Feeds panel says why.
 
 ---
 
-## Quick start
+## Run it yourself
+
+The public site at atlasmesh.onrender.com is a **showcase**: the live globe only. The Intel workspace and API keys run on your own machine, so nobody's keys or lookups go through a shared server.
+
+**Docker** (recommended):
+
+```bash
+docker run -d --name atlasmesh -p 127.0.0.1:3000:3000 \
+  -v atlasmesh-data:/app/server/data ghcr.io/atfastrslushymaker/atlasmesh:latest
+```
+
+or, from a clone, `docker compose up -d`. Open http://localhost:3000. Investigations and saved keys live in the `atlasmesh-data` volume.
+
+**Node.js 20+**:
 
 ```bash
 git clone https://github.com/AtfastrSlushyMaker/AtlasMesh.git
 cd AtlasMesh
 npm install
-cp .env.example .env   # optional; every key is optional
+npm run build && npm start      # http://localhost:3000
 ```
 
-```bash
-npm run start:server   # API + WebSocket on :3000
-npm run start:client   # Vite on :5173 (proxies /api to :3000)
-```
+For development, run `npm run start:server` (API on :3000) and `npm run start:client` (Vite on :5173).
 
-Production: `npm run build && npm start` serves the client and API on one port.
+### Modes
+
+| `ATLAS_MODE` | What runs |
+|---|---|
+| *(unset)* | Everything: globe, Intel workspace, Settings |
+| `showcase` | Globe only. Intel and key settings return 403 and the UI shows how to run a copy. Used by `render.yaml` |
+
+The image publishes to GHCR from `.github/workflows/docker.yml` on pushes to `main` and `v*` tags.
 
 ### Optional keys
 

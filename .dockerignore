@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+client/dist
+server/dist
+server/data
+server/.cache
+.git
+.env
+.env.*
+graphify-out
+.opencode
+.claude
+*.log
+temp_cors_middleware.txt

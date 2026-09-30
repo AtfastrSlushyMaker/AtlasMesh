@@ -1,3 +1,7 @@
+# Public showcase: the live globe only. The Intel workspace and API key
+# settings are switched off (ATLAS_MODE=showcase) so this server never
+# spends API credit or runs lookups for visitors; the app shows them how to
+# run their own copy instead.
 services:
   - type: web
     name: atlasmesh
@@ -12,20 +16,12 @@ services:
         value: production
       - key: PORT
         value: 3000
+      - key: ATLAS_MODE
+        value: showcase
+      # Optional keys that only improve the public globe:
       - key: OPENSKY_CLIENT_ID
         sync: false
       - key: OPENSKY_CLIENT_SECRET
         sync: false
       - key: AISSTREAM_TOKEN
-        sync: false
-      - key: DEEPSEEK_API_KEY
-        sync: false
-      - key: OSINT_ACCESS_KEY
-        sync: false
-      - key: GITHUB_TOKEN
-        sync: false
-      # Investigations are written to disk. Render's filesystem is ephemeral,
-      # so attach a persistent disk and point OSINT_DATA_DIR at it to keep them
-      # across deploys, e.g. mountPath /var/data and OSINT_DATA_DIR=/var/data/osint.
-      - key: OSINT_DATA_DIR
         sync: false
