@@ -13,8 +13,15 @@ export default defineConfig({
       cesiumBaseUrl: 'cesium',
     }),
   ],
-  build: {
-    target: 'esnext'
+  server: {
+    // The API runs on :3000 in development; the WebSocket connects there directly.
+    proxy: {
+      '/api': 'http://localhost:3000',
+      '/health': 'http://localhost:3000',
+    },
   },
-
+  build: {
+    target: 'esnext',
+    chunkSizeWarningLimit: 4000,
+  },
 });
