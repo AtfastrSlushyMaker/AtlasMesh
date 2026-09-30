@@ -5,16 +5,25 @@ services:
     rootDir: .
     buildCommand: npm install && npm run build
     startCommand: npm start
+    healthCheckPath: /health
+    plan: starter
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3000
-      - key: OPENSKY_USERNAME
+      - key: OPENSKY_CLIENT_ID
         sync: false
-      - key: OPENSKY_PASSWORD
+      - key: OPENSKY_CLIENT_SECRET
         sync: false
       - key: AISSTREAM_TOKEN
         sync: false
-    healthCheckPath: /health
-    plan: starter
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      # Investigations are written to disk. Render's filesystem is ephemeral,
+      # so attach a persistent disk and point OSINT_DATA_DIR at it to keep them
+      # across deploys, e.g. mountPath /var/data and OSINT_DATA_DIR=/var/data/osint.
+      - key: OSINT_DATA_DIR
+        sync: false
