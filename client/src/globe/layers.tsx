@@ -169,7 +169,13 @@ function useOrbitLayer(viewer: Viewer, visible: boolean, type: 'satellite' | 'st
   });
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      // The layer's entities were dropped; drop their orbit state too.
+      satrecs.current.clear();
+      props.current.clear();
+      pending.current = [];
+      return;
+    }
     let raf = 0;
     let stopped = false;
     const work = () => {

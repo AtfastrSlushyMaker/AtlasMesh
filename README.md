@@ -54,6 +54,7 @@ Production: `npm run build && npm start` serves the client and API on one port.
 | `AISSTREAM_TOKEN` | Live ships |
 | `DEEPSEEK_API_KEY` | Free-form AI analyst and report summaries (rules-based analyst otherwise). `LLM_BASE_URL` / `LLM_MODEL` switch to any OpenAI-compatible provider |
 | `GITHUB_TOKEN`, `STACKEXCHANGE_KEY`, `S2_API_KEY`, `CERTSPOTTER_TOKEN` | Higher connector rate limits |
+| `OSINT_ACCESS_KEY` | Requires a key to use the Intel workspace. Set this on any public deployment |
 | `OSINT_DATA_DIR` | Where investigations are saved (default `server/data/osint`) |
 
 ---

@@ -16,6 +16,24 @@ import { buildReport } from './report';
  */
 export const osintRouter = express.Router();
 
+/**
+ * Optional access gate. When OSINT_ACCESS_KEY is set, every Intel request
+ * must send it in the x-atlas-key header. Without it anyone who can reach
+ * the server can run investigations (and spend the LLM key), so production
+ * deployments should set it.
+ */
+const ACCESS_KEY = process.env.OSINT_ACCESS_KEY;
+if (!ACCESS_KEY && process.env.NODE_ENV === 'production') {
+  console.warn('[osint] OSINT_ACCESS_KEY is not set: the Intel workspace is open to anyone who can reach this server.');
+}
+osintRouter.get('/access', (req, res) => {
+  res.json({ required: !!ACCESS_KEY, ok: !ACCESS_KEY || req.get('x-atlas-key') === ACCESS_KEY });
+});
+osintRouter.use((req, res, next) => {
+  if (!ACCESS_KEY || req.get('x-atlas-key') === ACCESS_KEY) return next();
+  res.status(401).json({ error: 'This workspace needs an access key.', code: 'access_key' });
+});
+
 const DEFAULT_SETTINGS: InvestigationSettings = {
   maxDepth: 2,
   maxNodes: 400,

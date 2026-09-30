@@ -4,7 +4,11 @@ import {
   mdiFileDocumentOutline,
 } from '@mdi/js';
 import type { ClaimKind, GraphEdge, Investigation, NodeType } from '../../../shared/osint';
-import { api } from '../lib/api';
+import { api, storage } from '../lib/api';
+
+const key = () => storage.get<string>('intel:key', '');
+const withKey = (init: any = {}) => ({ ...init, headers: { ...(init.headers || {}), ...(key() ? { 'x-atlas-key': key() } : {}) } });
+const call = <T = any>(path: string, init?: any) => api<T>(path, withKey(init));
 
 export const NODE_STYLE: Record<NodeType, { label: string; color: string; shape: string; icon: string }> = {
   person: { label: 'Person', color: '#f2a7c9', shape: 'ellipse', icon: mdiAccount },
@@ -82,25 +86,27 @@ export const SEED_TYPES: Array<{ id: string; label: string; placeholder: string 
 ];
 
 export const osint = {
-  list: () => api<{ investigations: any[] }>('/api/osint/investigations'),
-  get: (id: string) => api<Investigation & { runningJob: any }>(`/api/osint/investigations/${id}`),
-  create: (body: any) => api<Investigation>('/api/osint/investigations', { method: 'POST', json: body }),
-  remove: (id: string) => api(`/api/osint/investigations/${id}`, { method: 'DELETE' }),
-  update: (id: string, body: any) => api(`/api/osint/investigations/${id}`, { method: 'PATCH', json: body }),
-  addSeed: (id: string, value: string, type?: string) => api<{ node: any }>(`/api/osint/investigations/${id}/seeds`, { method: 'POST', json: { value, type } }),
-  expand: (id: string, nodeId: string, body: any) => api<{ job: any }>(`/api/osint/investigations/${id}/nodes/${nodeId}/expand`, { method: 'POST', json: body }),
-  nodeConnectors: (id: string, nodeId: string) => api<{ connectors: Array<{ id: string; name: string; done: boolean }> }>(`/api/osint/investigations/${id}/nodes/${nodeId}/connectors`),
-  cancel: (id: string, jobId: string) => api(`/api/osint/investigations/${id}/jobs/${jobId}/cancel`, { method: 'POST' }),
-  patchNode: (id: string, nodeId: string, body: any) => api(`/api/osint/investigations/${id}/nodes/${nodeId}`, { method: 'PATCH', json: body }),
-  patchEdge: (id: string, edgeId: string, body: any) => api(`/api/osint/investigations/${id}/edges/${edgeId}`, { method: 'PATCH', json: body }),
-  patchContradiction: (id: string, cid: string, status: string) => api(`/api/osint/investigations/${id}/contradictions/${cid}`, { method: 'PATCH', json: { status } }),
-  note: (id: string, text: string) => api(`/api/osint/investigations/${id}/notes`, { method: 'POST', json: { text } }),
-  timeline: (id: string) => api<{ events: any[] }>(`/api/osint/investigations/${id}/timeline`),
-  path: (id: string, from: string, to: string, mode: string) => api<{ path: { nodeIds: string[]; edgeIds: string[]; strength: number } }>(`/api/osint/investigations/${id}/path?from=${from}&to=${to}&mode=${mode}`),
-  insights: (id: string) => api<any>(`/api/osint/investigations/${id}/insights`),
-  ask: (id: string, question: string, focus: string[]) => api<any>(`/api/osint/investigations/${id}/ask`, { method: 'POST', json: { question, focus } }),
-  report: (id: string) => api<{ markdown: string; citations: any[] }>(`/api/osint/investigations/${id}/report`, { method: 'POST' }),
-  connectors: () => api<{ connectors: any[]; analyst: { llm: boolean; provider: string | null } }>('/api/osint/connectors'),
+  access: () => call<{ required: boolean; ok: boolean }>('/api/osint/access'),
+  setKey: (k: string) => storage.set('intel:key', k),
+  list: () => call<{ investigations: any[] }>('/api/osint/investigations'),
+  get: (id: string) => call<Investigation & { runningJob: any }>(`/api/osint/investigations/${id}`),
+  create: (body: any) => call<Investigation>('/api/osint/investigations', { method: 'POST', json: body }),
+  remove: (id: string) => call(`/api/osint/investigations/${id}`, { method: 'DELETE' }),
+  update: (id: string, body: any) => call(`/api/osint/investigations/${id}`, { method: 'PATCH', json: body }),
+  addSeed: (id: string, value: string, type?: string) => call<{ node: any }>(`/api/osint/investigations/${id}/seeds`, { method: 'POST', json: { value, type } }),
+  expand: (id: string, nodeId: string, body: any) => call<{ job: any }>(`/api/osint/investigations/${id}/nodes/${nodeId}/expand`, { method: 'POST', json: body }),
+  nodeConnectors: (id: string, nodeId: string) => call<{ connectors: Array<{ id: string; name: string; done: boolean }> }>(`/api/osint/investigations/${id}/nodes/${nodeId}/connectors`),
+  cancel: (id: string, jobId: string) => call(`/api/osint/investigations/${id}/jobs/${jobId}/cancel`, { method: 'POST' }),
+  patchNode: (id: string, nodeId: string, body: any) => call(`/api/osint/investigations/${id}/nodes/${nodeId}`, { method: 'PATCH', json: body }),
+  patchEdge: (id: string, edgeId: string, body: any) => call(`/api/osint/investigations/${id}/edges/${edgeId}`, { method: 'PATCH', json: body }),
+  patchContradiction: (id: string, cid: string, status: string) => call(`/api/osint/investigations/${id}/contradictions/${cid}`, { method: 'PATCH', json: { status } }),
+  note: (id: string, text: string) => call(`/api/osint/investigations/${id}/notes`, { method: 'POST', json: { text } }),
+  timeline: (id: string) => call<{ events: any[] }>(`/api/osint/investigations/${id}/timeline`),
+  path: (id: string, from: string, to: string, mode: string) => call<{ path: { nodeIds: string[]; edgeIds: string[]; strength: number } }>(`/api/osint/investigations/${id}/path?from=${from}&to=${to}&mode=${mode}`),
+  insights: (id: string) => call<any>(`/api/osint/investigations/${id}/insights`),
+  ask: (id: string, question: string, focus: string[]) => call<any>(`/api/osint/investigations/${id}/ask`, { method: 'POST', json: { question, focus } }),
+  report: (id: string) => call<{ markdown: string; citations: any[] }>(`/api/osint/investigations/${id}/report`, { method: 'POST' }),
+  connectors: () => call<{ connectors: any[]; analyst: { llm: boolean; provider: string | null } }>('/api/osint/connectors'),
 };
 
 export function edgeLabel(inv: Investigation, e: GraphEdge) {

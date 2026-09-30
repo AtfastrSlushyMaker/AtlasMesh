@@ -20,6 +20,8 @@ services:
         sync: false
       - key: DEEPSEEK_API_KEY
         sync: false
+      - key: OSINT_ACCESS_KEY
+        sync: false
       - key: GITHUB_TOKEN
         sync: false
       # Investigations are written to disk. Render's filesystem is ephemeral,

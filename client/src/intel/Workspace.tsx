@@ -16,7 +16,43 @@ const emptyFilters = (): GraphFilters => ({ types: new Set(), platforms: new Set
 
 type MView = 'cases' | 'graph' | 'details' | 'dock';
 
+function KeyGate({ onUnlock }: { onUnlock: () => void }) {
+  const [value, setValue] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    osint.setKey(value.trim());
+    const r = await osint.access().catch(() => null);
+    if (r?.ok) onUnlock();
+    else setError('That key was not accepted.');
+  };
+  return (
+    <div className="intel" style={{ display: 'grid', placeItems: 'center', gridTemplateAreas: 'none', gridTemplateColumns: '1fr', gridTemplateRows: '1fr' }}>
+      <form className="panel pad" onSubmit={submit} style={{ width: 'min(400px, calc(100% - 32px))', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <h2 className="panel-title">Intel workspace access</h2>
+        <p className="muted" style={{ margin: 0, fontSize: 14 }}>This server protects investigations with an access key. Ask whoever runs it for the key.</p>
+        <label className="field">
+          <span>Access key</span>
+          <input className="input" type="password" value={value} onChange={(e) => setValue(e.target.value)} autoFocus aria-invalid={!!error} autoComplete="current-password" />
+        </label>
+        {error && <div role="alert" style={{ color: 'var(--bad)', fontSize: 14 }}>{error}</div>}
+        <button className="btn btn-primary" disabled={!value.trim()}>Unlock</button>
+      </form>
+    </div>
+  );
+}
+
 export default function Workspace() {
+  const [access, setAccess] = useState<'checking' | 'ok' | 'locked'>('checking');
+  useEffect(() => {
+    osint.access().then((r) => setAccess(r.ok ? 'ok' : 'locked')).catch(() => setAccess('ok'));
+  }, []);
+  if (access === 'checking') return <div className="intel" style={{ display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>;
+  if (access === 'locked') return <KeyGate onUnlock={() => setAccess('ok')} />;
+  return <WorkspaceInner />;
+}
+
+function WorkspaceInner() {
   const [list, setList] = useState<InvestigationSummary[]>([]);
   const [invId, setInvId] = useState<string | null>(() => storage.get('intel:last', null));
   const [inv, setInv] = useState<Investigation | null>(null);

@@ -155,8 +155,10 @@ export function Globe() {
     let target: Cesium.Entity | undefined;
     for (let i = 0; i < viewer.dataSources.length && !target; i++) target = viewer.dataSources.get(i).entities.getById(selectedId);
     if (!target?.position) return;
+    const t = target;
+    // Read the target's current position each frame: moving layers replace their position property on update.
     const ring = viewer.entities.add({
-      position: target.position as any,
+      position: new Cesium.CallbackPositionProperty((time) => t.position?.getValue(time ?? viewer.clock.currentTime), false) as any,
       point: { pixelSize: 26, color: Cesium.Color.TRANSPARENT, outlineColor: Cesium.Color.fromCssColorString('#d9468f'), outlineWidth: 2.5, disableDepthTestDistance: 0 },
     });
     viewer.scene.requestRender();
