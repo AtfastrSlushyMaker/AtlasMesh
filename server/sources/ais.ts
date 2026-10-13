@@ -9,7 +9,7 @@ export type AISOptions = {
 
 function toNumber(v: any): number | undefined {
   if (v === null || v === undefined) return undefined;
-  if (typeof v === 'number') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
 }
@@ -30,6 +30,7 @@ export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: 
   // Buffer incoming entities and flush as batches
   const buffer = new Map<string, Entity>();
   let flushTimer: NodeJS.Timeout | null = null;
+  let reconnectTimer: NodeJS.Timeout | null = null;
 
   function flush() {
     if (buffer.size === 0) return;
@@ -47,9 +48,12 @@ export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: 
   }
 
   function connect() {
-    ws = new WebSocket(url);
+    if (stopped) return;
+    const socket = new WebSocket(url, { handshakeTimeout: 10000, maxPayload: 64 * 1024 });
+    ws = socket;
 
-    ws.on('open', () => {
+    socket.on('open', () => {
+      if (stopped) return socket.terminate();
       console.log('AIS WS connected to', url);
       const subscriptionMsg = {
         APIKey: token,
@@ -57,10 +61,11 @@ export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: 
         FiltersShipMMSI: [],
         FilterMessageTypes: ["PositionReport"]
       };
-      ws!.send(JSON.stringify(subscriptionMsg));
+      socket.send(JSON.stringify(subscriptionMsg));
     });
 
-    ws.on('message', (data) => {
+    socket.on('message', (data) => {
+      if (stopped) return;
       try {
         const msg = JSON.parse(data.toString());
         if (msg.Message?.PositionReport && msg.MetaData) {
@@ -68,16 +73,21 @@ export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: 
           const meta = msg.MetaData;
           const lat = toNumber(pos.Latitude);
           const lon = toNumber(pos.Longitude);
-          if (lat === undefined || lon === undefined) return;
+          if (lat === undefined || lon === undefined || Math.abs(lat) > 90 || Math.abs(lon) > 180) return;
 
-          const mmsi = meta.MMSI?.toString() || 'unknown';
+          const mmsi = meta.MMSI?.toString();
+          if (!mmsi) return;
+          const speed = toNumber(pos.Sog);
+          const trueHeading = toNumber(pos.TrueHeading);
+          const course = toNumber(pos.Cog);
           const entity: Entity = {
             id: `ship:ais:${mmsi}`,
             type: 'ship',
             position: { lat, lon, alt: 0 },
-            velocity: toNumber(pos.Sog) !== undefined ? toNumber(pos.Sog)! * 0.514444 : undefined, // knots → m/s
+            velocity: speed !== undefined && speed >= 0 && speed < 102.3 ? speed * 0.514444 : undefined, // knots → m/s; 102.3 is unavailable
             // TrueHeading 511 means "not available"
-            heading: toNumber(pos.TrueHeading) !== undefined && toNumber(pos.TrueHeading)! < 360 ? toNumber(pos.TrueHeading) : toNumber(pos.Cog),
+            heading: trueHeading !== undefined && trueHeading >= 0 && trueHeading < 360 ? trueHeading :
+              course !== undefined && course >= 0 && course < 360 ? course : undefined,
             timestamp: Date.now(),
             metadata: {
               name: meta.ShipName?.trim() || `MMSI ${mmsi}`,
@@ -98,14 +108,20 @@ export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: 
       }
     });
 
-    ws.on('close', () => {
+    socket.on('close', () => {
+      if (stopped) return;
       flush(); // flush remaining on disconnect
-      if (!stopped) setTimeout(connect, reconnectMs);
+      console.warn('[AIS] Connection closed; reconnecting');
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, reconnectMs);
     });
 
-    ws.on('error', (err) => {
-      console.warn('AIS WS error:', (err as any)?.message || err);
-      try { ws?.close(); } catch (e) {}
+    socket.on('error', (err) => {
+      if (stopped) return;
+      console.warn('[AIS] Error:', (err as any)?.message || err);
+      socket.terminate();
     });
   }
 
@@ -114,7 +130,8 @@ export function startAISSource(onEntities: (entities: Entity[]) => void, opts?: 
   return () => {
     stopped = true;
     if (flushTimer) clearTimeout(flushTimer);
-    flush();
-    try { ws?.close(); } catch (e) {}
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    buffer.clear();
+    ws?.terminate();
   };
 }

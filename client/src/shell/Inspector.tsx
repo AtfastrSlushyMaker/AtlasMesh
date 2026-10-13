@@ -80,7 +80,7 @@ function facts(e: Entity): { subtitle?: string; stats: Stat[]; rows: Row[] } {
     case 'meteorite':
       return { stats: [['Mass', m.massGrams != null ? (m.massGrams > 1000 ? `${fmtNum(m.massGrams / 1000)} kg` : `${fmtNum(m.massGrams, 0)} g`) : undefined], ['Year', m.year]], rows: [['Class', m.recclass], ['Seen falling', m.fall === 'Fell' ? 'Yes' : 'Found later']] };
     case 'ixp':
-      return { subtitle: [m.city, m.country].filter(Boolean).join(', '), stats: [['Networks', m.netCount != null ? fmtNum(m.netCount, 0) : undefined]], rows: [['Full name', m.nameLong], ['Website', m.website]] };
+      return { subtitle: [m.city, m.country].filter(Boolean).join(', '), stats: [['Networks', m.netCount != null ? fmtNum(m.netCount, 0) : undefined]], rows: [['Full name', m.nameLong], ['Website', m.website], ['Mapped facility', m.facilitySourceUrl ? <a href={m.facilitySourceUrl} target="_blank" rel="noreferrer">{m.facilityName}</a> : m.facilityName], ['Location', m.locationNote]] };
     case 'airport':
       return { subtitle: [m.city, m.country].filter(Boolean).join(', '), stats: [['IATA', m.iata], ['ICAO', m.icao]], rows: [] };
     case 'cable':

@@ -14,7 +14,7 @@
   <a href="https://atlasmesh.onrender.com"><img src="https://img.shields.io/badge/🌐_Live-atlasmesh.onrender.com-00ffaa?style=flat-square" alt="Deployed" /></a>
   <img src="https://img.shields.io/badge/React-18-38bdf8?style=flat-square&logo=react" alt="React 18" />
   <img src="https://img.shields.io/badge/CesiumJS-1.10-22d3ee?style=flat-square" alt="CesiumJS" />
-  <img src="https://img.shields.io/badge/Node.js-20-10b981?style=flat-square&logo=node.js" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Node.js-24_LTS-10b981?style=flat-square&logo=node.js" alt="Node.js" />
   <img src="https://img.shields.io/badge/TypeScript-5-818cf8?style=flat-square&logo=typescript" alt="TypeScript" />
 </p>
 
@@ -27,6 +27,8 @@
 **Intel.** Start from a person, username, email, organisation, domain, web page, repository, package or DOI. AtlasMesh queries permitted public sources, extracts entities and relationships, links identities with stated reasons, and builds a graph in which every node and edge points to its evidence. An AI analyst answers questions about the graph with citations, and a report generator writes the findings up.
 
 Real sources only. No mock data; when a feed is down the Feeds panel says why.
+
+Only unexpired disk caches are used. When a refresh fails, the globe retains the last real observations already in memory and the feed shows an error; an expired dataset is never relabelled as freshly retrieved.
 
 ---
 
@@ -43,23 +45,32 @@ docker run -d --name atlasmesh -p 127.0.0.1:3000:3000 \
 
 or, from a clone, `docker compose up -d`. Open http://localhost:3000. Investigations and saved keys live in the `atlasmesh-data` volume.
 
-**Node.js 20+**:
+**Node.js 24 LTS** (the supported range is declared in `package.json`):
 
 ```bash
 git clone https://github.com/AtfastrSlushyMaker/AtlasMesh.git
 cd AtlasMesh
-npm install
+npm ci --include=dev
 npm run build && npm start      # http://localhost:3000
 ```
 
 For development, run `npm run start:server` (API on :3000) and `npm run start:client` (Vite on :5173).
 
+`npm test` runs the regression checks. `npm run build` checks TypeScript and produces both server and client builds. Commit `package-lock.json` whenever dependencies change; Render and Docker use it for reproducible installs, including the development tools needed at build time.
+
+### Render deployment
+
+`render.yaml` deploys the public showcase with the Node version in `.node-version`, `npm ci --include=dev && npm run build`, `npm start`, and `/health` as its health check. Set `ATLAS_MODE=showcase` on existing services created manually; a repository Blueprint does not automatically reconfigure those services.
+
+After a deployment, verify `/health`, `/api/config` (`mode: showcase`), `/api/sources`, and a globe layer subscription. Intel and settings writes must return 403. If a release fails verification, use **Rollback** on the previous successful deploy in Render, then repeat these checks. Render's filesystem is ephemeral; the showcase only caches public feeds. A full hosted workspace needs a persistent disk for `OSINT_DATA_DIR` and the settings file, plus `OSINT_ACCESS_KEY`.
+
 ### Modes
 
 | `ATLAS_MODE` | What runs |
 |---|---|
-| *(unset)* | Everything: globe, Intel workspace, Settings |
+| *(unset)* | Everything locally; globe-only showcase on Render |
 | `showcase` | Globe only. Intel and key settings return 403 and the UI shows how to run a copy. Used by `render.yaml` |
+| `full` | Everything. On Render, also requires `OSINT_ACCESS_KEY`; otherwise showcase mode stays active |
 
 The image publishes to GHCR from `.github/workflows/docker.yml` on pushes to `main` and `v*` tags.
 

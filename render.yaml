@@ -5,9 +5,9 @@
 services:
   - type: web
     name: atlasmesh
-    env: node
+    runtime: node
     rootDir: .
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /health
     plan: starter

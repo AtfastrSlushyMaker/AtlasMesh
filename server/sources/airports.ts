@@ -1,4 +1,5 @@
 import type { Entity } from '../../shared/entity';
+import { parse } from 'csv-parse/sync';
 import { fetchCached } from '../lib/http';
 
 export type AirportPollOptions = {
@@ -19,20 +20,19 @@ export function startAirportSource(
   async function fetchAndEmit() {
     try {
       const res = { data: await fetchCached<any>(AIRPORTS_URL, 7 * 24 * 60 * 60 * 1000, { timeout: 20000, responseType: 'text' }) };
-      const lines = (res.data as string).split('\n').filter((l: string) => l.trim());
+      const rows: string[][] = parse(res.data, { skip_empty_lines: true });
 
       const entities: Entity[] = [];
 
-      for (const line of lines) {
+      for (const parts of rows) {
         // Format: id,name,city,country,iata,icao,lat,lon,alt,timezone,dst,tz,type,source
-        const parts = line.split(',');
         if (parts.length < 8) continue;
 
-        const name = parts[1]?.replace(/"/g, '').trim() || '';
-        const city = parts[2]?.replace(/"/g, '').trim() || '';
-        const country = parts[3]?.replace(/"/g, '').trim() || '';
-        const iata = parts[4]?.replace(/"/g, '').trim() || '';
-        const icao = parts[5]?.replace(/"/g, '').trim() || '';
+        const name = parts[1]?.trim() || '';
+        const city = parts[2]?.trim() || '';
+        const country = parts[3]?.trim() || '';
+        const iata = parts[4]?.trim() || '';
+        const icao = parts[5]?.trim() || '';
         const lat = parseFloat(parts[6]);
         const lon = parseFloat(parts[7]);
 

@@ -22,9 +22,17 @@ interface Plant {
 
 /** Parse once per download; both layers share the result. */
 let cached: { at: number; plants: Plant[] } | null = null;
+let loading: Promise<Plant[]> | null = null;
 
-export async function loadPlants(): Promise<Plant[]> {
-  if (cached && Date.now() - cached.at < DAY) return cached.plants;
+export function loadPlants(): Promise<Plant[]> {
+  if (cached && Date.now() - cached.at < DAY) return Promise.resolve(cached.plants);
+  // Both source layers start together. Share parsing as well as the download
+  // so the full global CSV is not duplicated in memory on a small host.
+  if (!loading) loading = readPlants().finally(() => { loading = null; });
+  return loading;
+}
+
+async function readPlants(): Promise<Plant[]> {
   const csv = await fetchCached<string>(GPPD_URL, 7 * DAY, { responseType: 'text', timeout: 60000 });
   const rows: any[] = parse(csv, { columns: true, skip_empty_lines: true, relax_column_count: true });
   const plants: Plant[] = [];

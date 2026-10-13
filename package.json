@@ -1,6 +1,9 @@
 {
   "name": "atlasmesh",
   "private": true,
+  "engines": {
+    "node": ">=24.14.0 <25.0.0"
+  },
   "workspaces": [
     "client",
     "server",
@@ -9,11 +12,15 @@
   "scripts": {
     "start:server": "npm --workspace server run dev",
     "start:client": "npm --workspace client run dev",
-    "bootstrap": "npm install",
+    "bootstrap": "npm ci --include=dev",
     "build": "npm --workspace server run build && npm --workspace client run build",
+    "test": "npm run build && node --import tsx --test server/test/*.test.cjs client/test/*.test.mjs",
     "start": "npm --workspace server run start"
   },
   "dependencies": {
     "dotenv": "^17.4.2"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
   }
 }

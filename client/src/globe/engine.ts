@@ -43,7 +43,7 @@ function gibsDate(daysAgo: number) {
   return d.toISOString().slice(0, 10);
 }
 
-async function overlayProvider(id: Overlay, basemap: Basemap): Promise<Cesium.ImageryProvider | null> {
+async function overlayProvider(id: Overlay, basemap: Basemap, signal: AbortSignal): Promise<Cesium.ImageryProvider | null> {
   switch (id) {
     case 'labels':
       return new Cesium.UrlTemplateImageryProvider({
@@ -57,7 +57,8 @@ async function overlayProvider(id: Overlay, basemap: Basemap): Promise<Cesium.Im
         credit: 'Esri',
       });
     case 'radar': {
-      const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+      const res = await fetch('https://api.rainviewer.com/public/weather-maps.json', { signal });
+      if (!res.ok) throw new Error(`Rain radar could not be loaded (${res.status}).`);
       const meta = await res.json();
       const frame = meta?.radar?.past?.at(-1);
       if (!frame) return null;
@@ -140,29 +141,70 @@ export function setBasemap(viewer: Cesium.Viewer, id: Basemap) {
   viewer.scene.requestRender();
 }
 
-const overlayLayers = new Map<Overlay, Cesium.ImageryLayer>();
+// Requests and layers belong to a viewer. A replacement viewer must never reuse
+// imagery that was destroyed with the previous one (including StrictMode mounts).
+interface OverlayState {
+  layers: Map<Overlay, Cesium.ImageryLayer>;
+  requests: Map<Overlay, AbortController>;
+}
+const viewerOverlays = new WeakMap<Cesium.Viewer, OverlayState>();
+
+function overlaysFor(viewer: Cesium.Viewer) {
+  let state = viewerOverlays.get(viewer);
+  if (!state) {
+    state = { layers: new Map(), requests: new Map() };
+    viewerOverlays.set(viewer, state);
+  }
+  return state;
+}
+
+export function clearOverlays(viewer: Cesium.Viewer) {
+  const state = viewerOverlays.get(viewer);
+  if (!state) return;
+  for (const request of state.requests.values()) request.abort();
+  state.requests.clear();
+  if (!viewer.isDestroyed()) {
+    for (const layer of state.layers.values()) viewer.imageryLayers.remove(layer, true);
+  }
+  state.layers.clear();
+  viewerOverlays.delete(viewer);
+}
 
 export async function setOverlay(viewer: Cesium.Viewer, id: Overlay, on: boolean, basemap: Basemap) {
-  const existing = overlayLayers.get(id);
-  if (existing) {
-    viewer.imageryLayers.remove(existing, true);
-    overlayLayers.delete(id);
-  }
+  if (viewer.isDestroyed()) return;
+  const state = overlaysFor(viewer);
+  state.requests.get(id)?.abort();
+  state.requests.delete(id);
   if (!on) {
+    const existing = state.layers.get(id);
+    if (existing) viewer.imageryLayers.remove(existing, true);
+    state.layers.delete(id);
     viewer.scene.requestRender();
     return;
   }
-  const provider = await overlayProvider(id, basemap);
-  if (!provider || viewer.isDestroyed()) return;
-  const layer = viewer.imageryLayers.addImageryProvider(provider);
-  layer.alpha = OVERLAY_ALPHA[id];
-  // Keep labels above data overlays.
-  if (id !== 'labels') {
-    const labels = overlayLayers.get('labels');
-    if (labels) viewer.imageryLayers.raiseToTop(labels);
+  const request = new AbortController();
+  state.requests.set(id, request);
+  try {
+    const provider = await overlayProvider(id, basemap, request.signal);
+    // A slow fetch must not undo a newer toggle or basemap change.
+    if (request.signal.aborted || state.requests.get(id) !== request || viewer.isDestroyed()) return;
+    if (!provider) throw new Error('This imagery overlay is currently unavailable.');
+    const layer = viewer.imageryLayers.addImageryProvider(provider);
+    layer.alpha = OVERLAY_ALPHA[id];
+    const existing = state.layers.get(id);
+    if (existing) viewer.imageryLayers.remove(existing, true);
+    state.layers.set(id, layer);
+    // Keep labels above data overlays.
+    if (id !== 'labels') {
+      const labels = state.layers.get('labels');
+      if (labels) viewer.imageryLayers.raiseToTop(labels);
+    }
+    viewer.scene.requestRender();
+  } catch (error) {
+    if (!request.signal.aborted) throw error;
+  } finally {
+    if (state.requests.get(id) === request) state.requests.delete(id);
   }
-  overlayLayers.set(id, layer);
-  viewer.scene.requestRender();
 }
 
 export function flyTo(viewer: Cesium.Viewer, lat: number, lon: number, height = 1_500_000) {

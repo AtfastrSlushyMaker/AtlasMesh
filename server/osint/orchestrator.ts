@@ -2,13 +2,12 @@ import type { AxiosRequestConfig } from 'axios';
 import type { GraphNode, Investigation, Job, NodeType } from '../../shared/osint';
 import type { Connector, ConnectorContext } from './connectors/types';
 import { connectorsFor } from './connectors';
-import { client } from '../lib/http';
 import { ingest } from './ingest';
 import { resolveIdentities } from './resolve';
 import { detectContradictions } from './analysis';
 import { rescoreAll } from './confidence';
 import { repo, newId } from './repository';
-import { robotsAllows, safeFetchPage, SafetyError } from './safety';
+import { robotsAllows, safeFetchPage, safeGet, SafetyError } from './safety';
 
 /**
  * Discovery orchestration: controlled, budgeted, breadth-first expansion.
@@ -74,7 +73,7 @@ export function startExpansion(inv: Investigation, nodeId: string, opts: ExpandO
     .finally(() => {
       job.finishedAt = Date.now();
       running.delete(job.id);
-      repo.save(inv);
+      if (repo.get(inv.id) === inv) repo.save(inv);
     });
   return job;
 }
@@ -91,29 +90,33 @@ async function run(inv: Investigation, job: Job, seedId: string, opts: ExpandOpt
     if (job.log.length > 300) job.log.splice(0, job.log.length - 300);
   };
 
-  const makeCtx = (connector: Connector, node: GraphNode): ConnectorContext => ({
-    signal,
-    log: (m, level = 'info') => log(m, level, { connector: connector.id, nodeId: node.id }),
-    async get<T>(url: string, config: AxiosRequestConfig = {}): Promise<T> {
+  const makeCtx = (connector: Connector, node: GraphNode): ConnectorContext => {
+    const beforeRequest = async () => {
       if (signal.cancelled) throw new Error('cancelled');
       if (job.requests >= settings.maxRequestsPerJob) throw new BudgetError();
       await throttle(connector);
-      job.requests++;
-      const res = await client.get(url, { timeout: 20000, ...config });
-      return res.data as T;
-    },
-    async getPage(url: string) {
       if (signal.cancelled) throw new Error('cancelled');
       if (job.requests >= settings.maxRequestsPerJob) throw new BudgetError();
-      if (!(await robotsAllows(url))) {
-        log(`robots.txt disallows ${url}; skipped`, 'warn', { connector: connector.id, nodeId: node.id });
-        return null;
-      }
-      await throttle(connector);
       job.requests++;
-      return safeFetchPage(url);
-    },
-  });
+    };
+    return {
+      signal,
+      log: (m, level = 'info') => log(m, level, { connector: connector.id, nodeId: node.id }),
+      async get<T>(url: string, config: AxiosRequestConfig = {}): Promise<T> {
+        const { response } = await safeGet(url, { timeout: 20000, ...config }, false, beforeRequest);
+        return response.data as T;
+      },
+      async getPage(url: string) {
+        if (signal.cancelled) throw new Error('cancelled');
+        if (job.requests >= settings.maxRequestsPerJob) throw new BudgetError();
+        if (!(await robotsAllows(url, beforeRequest))) {
+          log(`robots.txt disallows ${url}; skipped`, 'warn', { connector: connector.id, nodeId: node.id });
+          return null;
+        }
+        return safeFetchPage(url, undefined, beforeRequest);
+      },
+    };
+  };
 
   const queue: Array<{ id: string; level: number }> = [{ id: seedId, level: 1 }];
   const visited = new Set<string>();
@@ -157,7 +160,7 @@ async function run(inv: Investigation, job: Job, seedId: string, opts: ExpandOpt
             if (t && FOLLOW_TYPES.includes(t.type) && e.confidence.score >= settings.minConfidence && !t.hidden) queue.push({ id: t.id, level: level + 1 });
           }
         }
-        repo.save(inv);
+        if (repo.get(inv.id) === inv) repo.save(inv);
       } catch (err: any) {
         if (err instanceof BudgetError) {
           log(`Request budget of ${settings.maxRequestsPerJob} reached — stopping`, 'warn');

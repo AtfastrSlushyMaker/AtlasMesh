@@ -12,18 +12,18 @@ import { client, poll } from '../lib/http';
 const STATES_URL = 'https://opensky-network.org/api/states/all';
 const TOKEN_URL = 'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token';
 
-let token: { value: string; expiresAt: number } | null = null;
+let token: { value: string; expiresAt: number; clientId: string; clientSecret: string } | null = null;
 
 async function authHeaders(): Promise<Record<string, string>> {
   const id = process.env.OPENSKY_CLIENT_ID;
   const secret = process.env.OPENSKY_CLIENT_SECRET;
   if (id && secret) {
-    if (!token || Date.now() > token.expiresAt - 60_000) {
+    if (!token || token.clientId !== id || token.clientSecret !== secret || Date.now() > token.expiresAt - 60_000) {
       const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: id, client_secret: secret });
       const res = await client.post(TOKEN_URL, body.toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
-      token = { value: res.data.access_token, expiresAt: Date.now() + (res.data.expires_in ?? 1800) * 1000 };
+      token = { value: res.data.access_token, expiresAt: Date.now() + (res.data.expires_in ?? 1800) * 1000, clientId: id, clientSecret: secret };
     }
     return { Authorization: `Bearer ${token.value}` };
   }
@@ -34,7 +34,8 @@ async function authHeaders(): Promise<Record<string, string>> {
 }
 
 export function isAircraftAuthenticated() {
-  return !!(process.env.OPENSKY_CLIENT_ID || process.env.OPENSKY_USERNAME);
+  return !!((process.env.OPENSKY_CLIENT_ID && process.env.OPENSKY_CLIENT_SECRET) ||
+    (process.env.OPENSKY_USERNAME && process.env.OPENSKY_PASSWORD));
 }
 
 export function startAircraftSource(onEntities: (entities: Entity[]) => void) {

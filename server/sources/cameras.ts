@@ -22,6 +22,7 @@ const DIGITRAFFIC_URL = 'https://tie.digitraffic.fi/api/weathercam/v1/stations';
 
 async function loadTfl(): Promise<Entity[]> {
   const rows = await fetchCached<any[]>(TFL_URL, 10 * 60 * 1000);
+  if (!Array.isArray(rows)) throw new Error('TfL returned an invalid camera catalogue');
   const out: Entity[] = [];
   for (const r of rows || []) {
     const props: Record<string, string> = {};
@@ -53,6 +54,11 @@ async function loadCaltrans(): Promise<Entity[]> {
   const results = await Promise.allSettled(
     CALTRANS_DISTRICTS.map((d) => fetchCached<any>(caltransUrl(d), 60 * 60 * 1000))
   );
+  const failed = results.flatMap((res, i) =>
+    res.status === 'rejected' || !Array.isArray(res.value?.data) ? [CALTRANS_DISTRICTS[i]] : []);
+  if (failed.length) {
+    throw new Error(`Caltrans districts ${failed.join(', ')} failed; keeping the last complete catalogue`);
+  }
   results.forEach((res, i) => {
     if (res.status !== 'fulfilled') return;
     for (const row of res.value?.data || []) {
@@ -90,6 +96,7 @@ async function loadDigitraffic(): Promise<Entity[]> {
   const data = await fetchCached<any>(DIGITRAFFIC_URL, 60 * 60 * 1000, {
     headers: { 'Digitraffic-User': 'AtlasMesh', 'Accept-Encoding': 'gzip' },
   });
+  if (!Array.isArray(data?.features)) throw new Error('Digitraffic returned an invalid camera catalogue');
   const out: Entity[] = [];
   for (const f of data?.features || []) {
     const [lon, lat] = f.geometry?.coordinates || [];
@@ -117,15 +124,20 @@ async function loadDigitraffic(): Promise<Entity[]> {
 }
 
 export function startCameraSource(onEntities: (entities: Entity[]) => void) {
+  const latest: Entity[][] = [[], [], []];
   return poll(async () => {
     const parts = await Promise.allSettled([loadTfl(), loadCaltrans(), loadDigitraffic()]);
-    const all: Entity[] = [];
+    const errors: string[] = [];
     const names = ['TfL', 'Caltrans', 'Digitraffic'];
     parts.forEach((p, i) => {
-      if (p.status === 'fulfilled') all.push(...p.value);
-      else console.warn(`[Cameras] ${names[i]} failed:`, (p.reason as any)?.message || p.reason);
+      if (p.status === 'fulfilled') latest[i] = p.value;
+      else errors.push(`${names[i]} failed: ${(p.reason as any)?.message || p.reason}`);
     });
+    const all = latest.flat();
     console.log(`[Cameras] ${all.length} public cameras`);
-    if (all.length) onEntities(all);
+    if (all.length || !errors.length) onEntities(all);
+    // Report after the partial update, which otherwise clears the feed's error.
+    // Failed providers retain their last catalogue instead of disappearing.
+    for (const message of errors) console.warn('[Cameras]', message);
   }, 30 * 60 * 1000);
 }

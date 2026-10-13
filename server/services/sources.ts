@@ -64,7 +64,8 @@ class SourceRegistry {
     return Array.from(this.states.values()).map((s) => {
       let status: SourceInfo['status'] = 'pending';
       if (s.disabled) status = 'disabled';
-      else if (s.lastUpdate == null) status = s.lastError ? 'error' : 'pending';
+      else if (s.lastError) status = 'error';
+      else if (s.lastUpdate == null) status = 'pending';
       else if (now - s.lastUpdate > Math.max(s.def.refreshMs * 3, 5 * 60 * 1000)) status = 'stale';
       else status = 'live';
       return {

@@ -43,9 +43,9 @@ export function RunLocally({ compact = false }: { compact?: boolean }) {
       </section>
       <section>
         <h3 className="section-title" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, color: 'var(--text)' }}>
-          <Icon path={mdiLaptop} size={18} />With Node.js 20+
+          <Icon path={mdiLaptop} size={18} />With Node.js 24 LTS
         </h3>
-        <Cmd text={`git clone ${repo}.git\ncd AtlasMesh && npm install\nnpm run build && npm start`} />
+        <Cmd text={`git clone ${repo}.git\ncd AtlasMesh && npm ci --include=dev\nnpm run build && npm start`} />
       </section>
       <a className="btn" href={repo} target="_blank" rel="noreferrer" style={{ alignSelf: 'flex-start' }}>
         <Icon path={mdiGithub} size={18} />Open on GitHub

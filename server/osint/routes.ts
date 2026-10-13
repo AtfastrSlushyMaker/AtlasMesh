@@ -143,6 +143,8 @@ osintRouter.patch('/investigations/:id', (req, res) => {
 });
 
 osintRouter.delete('/investigations/:id', (req, res) => {
+  const job = getRunningJob(req.params.id);
+  if (job) cancelJob(job.id);
   res.json({ deleted: repo.delete(req.params.id) });
 });
 

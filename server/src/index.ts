@@ -27,10 +27,12 @@ import { startCameraSource } from '../sources/cameras';
 import { startDisasterSource } from '../sources/disasters';
 import { startBuoySource } from '../sources/buoys';
 import { osintRouter } from '../osint/routes';
+import { repo } from '../osint/repository';
 import { analystAvailable } from '../osint/analyst';
 import { settingsSummary, updateSettings } from '../services/config';
 import { testSetting } from '../services/settingsTest';
 import { accessKey, canEditSettings, isShowcase, REPO_URL, IMAGE } from '../lib/access';
+import { sendSocketMessage } from '../lib/socket';
 
 const VERSION = '2.1.0';
 const MIN = 60 * 1000;
@@ -105,7 +107,11 @@ app.get('/api/sources', (_req, res) => res.json({ sources: sources.list() }));
 
 app.get('/api/entities', (req, res) => {
   const type = req.query.type as EntityType | undefined;
-  const limit = Math.min(Number(req.query.limit) || 1000, 20000);
+  const requested = req.query.limit === undefined ? 1000 : Number(req.query.limit);
+  if (!Number.isInteger(requested) || requested < 1) {
+    return res.status(400).json({ error: 'limit must be a positive integer' });
+  }
+  const limit = Math.min(requested, 20000);
   const list = type ? store.getByType(type) : store.getAll();
   res.json({ count: list.length, entities: list.slice(0, limit) });
 });
@@ -122,12 +128,17 @@ app.get('/api/entities/:id', (req, res) => {
 });
 
 app.get('/api/near', (req, res) => {
-  const lat = Number(req.query.lat);
-  const lon = Number(req.query.lon);
-  const radius = Math.min(Number(req.query.radiusKm) || 50, 2000);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    return res.status(400).json({ error: 'lat and lon query parameters are required numbers' });
+  const coordinate = (value: unknown) => typeof value === 'string' && value.trim() ? Number(value) : NaN;
+  const lat = coordinate(req.query.lat);
+  const lon = coordinate(req.query.lon);
+  const requestedRadius = req.query.radiusKm === undefined ? 50 : coordinate(req.query.radiusKm);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    return res.status(400).json({ error: 'lat must be between -90 and 90 and lon between -180 and 180' });
   }
+  if (!Number.isFinite(requestedRadius) || requestedRadius <= 0) {
+    return res.status(400).json({ error: 'radiusKm must be a positive number' });
+  }
+  const radius = Math.min(requestedRadius, 2000);
   const types = req.query.types ? String(req.query.types).split(',') as EntityType[] : undefined;
   const results = store.near(lat, lon, radius, types, 100).map(({ entity, distanceKm }) => ({
     id: entity.id,
@@ -164,9 +175,7 @@ if (process.env.NODE_ENV === 'production' && fs.existsSync(clientDist)) {
 type Client = WebSocket & { isAlive?: boolean; layers?: Set<EntityType> };
 
 function send(ws: WebSocket, msg: unknown) {
-  if (ws.readyState !== WebSocket.OPEN) return;
-  ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
-  messagesSent++;
+  if (sendSocketMessage(ws, msg)) messagesSent++;
 }
 
 const SNAPSHOT_CHUNK = 4000;
@@ -282,7 +291,7 @@ const SOURCES: SourceEntry[] = [
 // Sources log failures as "[Tag] Error: …". Route those to the registry so the
 // feed panel can say why a layer is empty, without threading callbacks everywhere.
 const LOG_TAGS: Record<string, string> = {
-  aircraft: 'aircraft', satellites: 'satellite', starlink: 'starlink', iss: 'iss', launches: 'launch',
+  aircraft: 'aircraft', ais: 'ship', satellites: 'satellite', starlink: 'starlink', iss: 'iss', launches: 'launch',
   earthquakes: 'earthquake', disasters: 'disaster', events: 'event', wildfires: 'wildfire', volcanoes: 'volcano',
   weather: 'weather', buoys: 'buoy', fireballs: 'fireball', cameras: 'camera', 'submarine cables': 'cable', cables: 'cable',
   ixp: 'ixp', airports: 'airport', powerplants: 'powerplant', windfarms: 'windfarm', meteorites: 'meteorite',
@@ -351,7 +360,7 @@ settingsRouter.get('/', (req, res) => {
   res.json({
     canEdit: editable,
     reason: editable ? null : isShowcase() ? 'This is the public demo, so keys can’t be added here. Run AtlasMesh yourself to use your own keys.' : accessKey() ? 'Enter the workspace access key to change settings.' : 'Settings can only be changed from the computer running the server, or after an access key is set there.',
-    settings: settingsSummary(),
+    settings: settingsSummary().map((s) => editable ? s : { ...s, preview: null }),
     services: { llm: analystAvailable(), aircraftAuthenticated: isAircraftAuthenticated(), ships: !!process.env.AISSTREAM_TOKEN },
   });
 });
@@ -359,7 +368,7 @@ settingsRouter.get('/', (req, res) => {
 settingsRouter.put('/', (req, res) => {
   if (!canEditSettings(req)) return res.status(403).json({ error: 'You can\'t change settings from here. Use the computer running the server, or enter the access key.' });
   const values = req.body?.values;
-  if (!values || typeof values !== 'object') return res.status(400).json({ error: 'Nothing to save' });
+  if (!values || typeof values !== 'object' || Array.isArray(values)) return res.status(400).json({ error: 'Nothing to save' });
   try {
     const { changed, restart } = updateSettings(values);
     restart.forEach(restartSource);
@@ -388,6 +397,12 @@ function shutdown(signal: string) {
   clearInterval(pingInterval);
   clearInterval(sourcesInterval);
   clearInterval(sweepInterval);
+  const stops = [...running.values()];
+  running.clear();
+  for (const stop of stops) {
+    try { stop(); } catch (err) { console.warn('[Server] Source shutdown failed:', err); }
+  }
+  repo.flush();
   wss.clients.forEach((c) => c.close(1001, 'Server shutting down'));
   wss.close();
   server.close(() => process.exit(0));

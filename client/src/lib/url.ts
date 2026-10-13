@@ -21,7 +21,9 @@ export function parseUrl(): Parsed {
   const q = new URLSearchParams(query);
   const out: Parsed = { mode: path.startsWith('/intel') ? 'intel' : 'globe' };
   const cam = q.get('cam')?.split(',').map(Number);
-  if (cam && cam.length === 3 && cam.every(Number.isFinite)) out.cam = { lat: cam[0], lon: cam[1], h: cam[2] };
+  if (cam && cam.length === 3 && cam.every(Number.isFinite) && Math.abs(cam[0]) <= 90 && Math.abs(cam[1]) <= 180 && cam[2] >= 150 && cam[2] <= 60_000_000) {
+    out.cam = { lat: cam[0], lon: cam[1], h: cam[2] };
+  }
   const sel = q.get('sel');
   if (sel && sel.length < 200) out.sel = sel;
   const inv = q.get('inv');

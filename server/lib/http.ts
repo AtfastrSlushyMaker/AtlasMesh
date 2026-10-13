@@ -33,8 +33,9 @@ const inflight = new Map<string, Promise<any>>();
  * airports…) are cached so dev-server restarts don't hammer upstream hosts
  * — Celestrak in particular rate-limits repeated downloads.
  *
- * If the network request fails and a stale cache entry exists, the stale copy
- * is returned instead of throwing.
+ * Expired entries are not substituted for a successful refresh. On failure,
+ * sources retain their last real observations and report the upstream error
+ * instead of making an old disk copy look like newly retrieved data.
  */
 export async function fetchCached<T = any>(
   url: string,
@@ -42,14 +43,11 @@ export async function fetchCached<T = any>(
   config: AxiosRequestConfig = {}
 ): Promise<T> {
   const file = cachePath(url);
-  let stale: { data: T } | null = null;
-
   try {
     const stat = fs.statSync(file);
     const raw = fs.readFileSync(file, 'utf8');
     const parsed = JSON.parse(raw);
     if (Date.now() - stat.mtimeMs < ttlMs) return parsed.data as T;
-    stale = parsed;
   } catch {
     // no cache yet
   }
@@ -66,12 +64,6 @@ export async function fetchCached<T = any>(
         console.warn('[cache] write failed:', err?.message);
       }
       return res.data as T;
-    } catch (err) {
-      if (stale) {
-        console.warn(`[cache] network failed for ${url}; serving stale copy`);
-        return stale.data;
-      }
-      throw err;
     } finally {
       inflight.delete(url);
     }

@@ -1,9 +1,9 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { mdiMagnify, mdiMapMarker, mdiGraphOutline, mdiEarth, mdiHelpCircleOutline, mdiPulse } from '@mdi/js';
 import { Icon } from './Icon';
 import { LAYERS, LAYER_BY_ID } from '../lib/layers';
 import { BASEMAPS } from '../globe/engine';
-import { entityIndex, displayName } from '../globe/index';
+import { entityIndex, displayName, indexVersion, subscribeIndex } from '../globe/index';
 import { getApp, getViewer, setApp, useApp } from '../state';
 import { flyTo } from '../globe/engine';
 
@@ -77,17 +77,15 @@ function commands(q: string): Item[] {
 
 export function Palette({ onPick }: { onPick: (id: string) => void }) {
   const open = useApp((s) => s.paletteOpen);
+  return open ? <PaletteDialog onPick={onPick} /> : null;
+}
+
+function PaletteDialog({ onPick }: { onPick: (id: string) => void }) {
+  const version = useSyncExternalStore(subscribeIndex, indexVersion);
   const [q, setQ] = useState('');
   const [places, setPlaces] = useState<Item[]>([]);
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (open) {
-      setQ('');
-      setActive(0);
-    }
-  }, [open]);
 
   // Place search (Photon/OSM), debounced
   useEffect(() => {
@@ -132,13 +130,12 @@ export function Palette({ onPick }: { onPick: (id: string) => void }) {
   const items = useMemo(() => {
     const term = deferredQ.trim().toLowerCase();
     return [...searchEntities(term, onPick), ...places, ...commands(term)];
-  }, [deferredQ, places, onPick]);
+  }, [deferredQ, places, onPick, version]);
 
   useEffect(() => {
     setActive(0);
   }, [items.length]);
 
-  if (!open) return null;
   const close = () => setApp({ paletteOpen: false });
   const run = (it: Item) => {
     close();

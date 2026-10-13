@@ -71,24 +71,33 @@ export function settingsSummary() {
 export function updateSettings(values: Record<string, string | null>) {
   const restart = new Set<string>();
   const changed: string[] = [];
+  const next = { ...saved };
+  const edits: Record<string, string> = {};
   for (const [k, raw] of Object.entries(values)) {
     const def = SETTINGS.find((s) => s.key === k);
     if (!def || external.has(k)) continue;
     const v = typeof raw === 'string' ? raw.trim().slice(0, 500) : '';
     if ((process.env[k] || '') === v) continue;
     if (v) {
-      process.env[k] = v;
-      saved[k] = v;
+      next[k] = v;
     } else {
-      delete process.env[k];
-      delete saved[k];
+      delete next[k];
     }
+    edits[k] = v;
     changed.push(k);
     def.restarts?.forEach((id) => restart.add(id));
   }
   if (changed.length) {
     fs.mkdirSync(path.dirname(FILE), { recursive: true });
-    fs.writeFileSync(FILE, JSON.stringify(saved, null, 2), { mode: 0o600 });
+    const temp = `${FILE}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify(next, null, 2), { mode: 0o600 });
+    fs.renameSync(temp, FILE);
+    saved = next;
+    // Apply only after persistence succeeds; a failed save must not change keys.
+    for (const [key, value] of Object.entries(edits)) {
+      if (value) process.env[key] = value;
+      else delete process.env[key];
+    }
   }
   return { changed, restart: [...restart] };
 }

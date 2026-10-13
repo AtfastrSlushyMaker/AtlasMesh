@@ -75,7 +75,10 @@ export const AircraftLayer = memo(function AircraftLayer({ viewer, visible }: Pr
       }),
     update: (ent, e) => {
       ent.position = movingPosition(e.position.lat, e.position.lon, e.position.alt ?? 0, e.velocity, e.heading, 180) as any;
-      if (ent.billboard) ent.billboard.rotation = new Cesium.ConstantProperty(-Cesium.Math.toRadians(e.heading ?? 0));
+      if (ent.billboard) {
+        ent.billboard.rotation = new Cesium.ConstantProperty(-Cesium.Math.toRadians(e.heading ?? 0));
+        ent.billboard.image = new Cesium.ConstantProperty(e.metadata?.onGround ? aircraftGroundIcon() : aircraftIcon());
+      }
     },
   });
   return null;
@@ -121,7 +124,7 @@ function geodetic(satrec: any, date: Date) {
 function useOrbitLayer(viewer: Viewer, visible: boolean, type: 'satellite' | 'starlink') {
   const satrecs = useRef(new Map<string, any>());
   const props = useRef(new Map<string, Cesium.SampledPositionProperty>());
-  const pending = useRef<string[]>([]);
+  const pending = useRef(new Set<string>());
   const color = LAYER_BY_ID[type].color;
   const image = type === 'starlink' ? dotIcon(color, 8) : markerIcon(LAYER_BY_ID.satellite.icon, color, 32);
 
@@ -155,7 +158,7 @@ function useOrbitLayer(viewer: Viewer, visible: boolean, type: 'satellite' | 'st
       p.addSample(Cesium.JulianDate.now(), now);
       satrecs.current.set(e.id, satrec);
       props.current.set(e.id, p);
-      pending.current.push(e.id);
+      pending.current.add(e.id);
       return ds.entities.add({
         id: e.id,
         position: p as any,
@@ -165,6 +168,7 @@ function useOrbitLayer(viewer: Viewer, visible: boolean, type: 'satellite' | 'st
     onRemove: (id) => {
       satrecs.current.delete(id);
       props.current.delete(id);
+      pending.current.delete(id);
     },
   });
 
@@ -173,7 +177,7 @@ function useOrbitLayer(viewer: Viewer, visible: boolean, type: 'satellite' | 'st
       // The layer's entities were dropped; drop their orbit state too.
       satrecs.current.clear();
       props.current.clear();
-      pending.current = [];
+      pending.current.clear();
       return;
     }
     let raf = 0;
@@ -181,8 +185,12 @@ function useOrbitLayer(viewer: Viewer, visible: boolean, type: 'satellite' | 'st
     const work = () => {
       if (stopped) return;
       const t0 = performance.now();
-      while (pending.current.length && performance.now() - t0 < 8) fill(pending.current.pop()!);
-      if (pending.current.length) viewer.scene.requestRender();
+      while (pending.current.size && performance.now() - t0 < 8) {
+        const id = pending.current.values().next().value!;
+        pending.current.delete(id);
+        fill(id);
+      }
+      if (pending.current.size) viewer.scene.requestRender();
       raf = requestAnimationFrame(work);
     };
     raf = requestAnimationFrame(work);
@@ -197,7 +205,7 @@ function useOrbitLayer(viewer: Viewer, visible: boolean, type: 'satellite' | 'st
         const c = geodetic(satrecs.current.get(id), new Date());
         if (c) fresh.addSample(Cesium.JulianDate.now(), c);
         if (ent) ent.position = fresh as any;
-        pending.current.push(id);
+        pending.current.add(id);
       }
     }, 15 * 60 * 1000);
     return () => {

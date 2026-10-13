@@ -1,0 +1,49 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci --include=dev
+      - run: npm test
+
+  container:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t atlasmesh:check .
+      - name: Scan runtime image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: atlasmesh:check
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Verify container health
+        run: |
+          docker run -d --name atlasmesh-check -e ATLAS_MODE=showcase atlasmesh:check
+          for attempt in $(seq 1 20); do
+            if docker exec atlasmesh-check node -e "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs atlasmesh-check
+          exit 1
+      - if: always()
+        run: docker rm -f atlasmesh-check || true

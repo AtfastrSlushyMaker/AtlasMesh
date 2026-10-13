@@ -104,6 +104,7 @@
   display: flex;
   align-items: stretch;
   min-width: 0;
+  flex-shrink: 0;
   overflow: hidden;
 }
 
@@ -118,6 +119,7 @@
   background: transparent;
   text-align: left;
   min-width: 96px;
+  flex-shrink: 0;
   position: relative;
   transition: background-color 150ms var(--ease);
 }
@@ -165,6 +167,7 @@
   align-items: center;
   gap: 10px;
   width: min(340px, 30vw);
+  min-width: 0;
   height: 38px;
   margin: 0 12px;
   padding: 0 10px 0 12px;
@@ -174,6 +177,17 @@
   color: var(--text-3);
   text-align: left;
   font-size: 14px;
+}
+
+.strip-search .search-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip-search .kbd {
+  flex-shrink: 0;
 }
 
 :root[data-theme="day"] .strip-search {
@@ -853,7 +867,7 @@ body[data-drawer="open"] .welcome {
   }
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1560px) {
   .demo-badge {
     font-size: 0;
     padding: 0 10px;

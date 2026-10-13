@@ -42,19 +42,19 @@ function Clock() {
 
 /** Live counts that double as layer toggles. */
 function Counters() {
-  useSyncExternalStore(subscribeIndex, indexVersion);
+  const version = useSyncExternalStore(subscribeIndex, indexVersion);
   const visibility = useApp((s) => s.visibility);
   const counts = countsByType();
   const quakes = useMemo(() => {
     let strong = 0;
     for (const e of entityIndex.values()) if (e.type === 'earthquake' && Number(e.metadata?.mag) >= 4.5) strong++;
     return strong;
-  }, [counts.earthquake]);
+  }, [version]);
   const alerts = useMemo(() => {
     let n = 0;
     for (const e of entityIndex.values()) if (e.type === 'disaster' && e.metadata?.alertLevel !== 'Green') n++;
     return n;
-  }, [counts.disaster]);
+  }, [version]);
 
   const items: Array<{ id: keyof typeof LAYER_BY_ID; label: string; value: number; sub?: string }> = [
     { id: 'aircraft', label: 'Aircraft', value: counts.aircraft || 0 },

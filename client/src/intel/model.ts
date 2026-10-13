@@ -86,10 +86,10 @@ export const SEED_TYPES: Array<{ id: string; label: string; placeholder: string 
 ];
 
 export const osint = {
-  access: () => call<{ required: boolean; ok: boolean }>('/api/osint/access'),
+  access: () => call<{ required: boolean; ok: boolean; showcase?: boolean }>('/api/osint/access'),
   setKey: (k: string) => storage.set('intel:key', k),
   list: () => call<{ investigations: any[] }>('/api/osint/investigations'),
-  get: (id: string) => call<Investigation & { runningJob: any }>(`/api/osint/investigations/${id}`),
+  get: (id: string, init?: RequestInit) => call<Investigation & { runningJob: any }>(`/api/osint/investigations/${id}`, init),
   create: (body: any) => call<Investigation>('/api/osint/investigations', { method: 'POST', json: body }),
   remove: (id: string) => call(`/api/osint/investigations/${id}`, { method: 'DELETE' }),
   update: (id: string, body: any) => call(`/api/osint/investigations/${id}`, { method: 'PATCH', json: body }),

@@ -37,9 +37,12 @@ export function startWeatherSource(onEntities: (entities: Entity[]) => void) {
       const url =
         `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
         '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,precipitation' +
-        '&wind_speed_unit=ms&timezone=auto';
+        '&wind_speed_unit=ms&timezone=auto&timeformat=unixtime';
       const res = await client.get(url);
       const rows: any[] = Array.isArray(res.data) ? res.data : [res.data];
+      if (rows.length !== CITIES.length || rows.some((r) => !Number.isFinite(r?.current?.time))) {
+        throw new Error('Open-Meteo returned incomplete current conditions');
+      }
       const out: Entity[] = rows.map((r, i) => {
         const [name, la, lo] = CITIES[i];
         const c = r.current || {};
@@ -47,7 +50,7 @@ export function startWeatherSource(onEntities: (entities: Entity[]) => void) {
           id: `weather:${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
           type: 'weather',
           position: { lat: la, lon: lo },
-          timestamp: Date.parse(c.time) || Date.now(),
+          timestamp: c.time * 1000,
           metadata: {
             name,
             conditions: WMO[c.weather_code] ?? `Code ${c.weather_code}`,

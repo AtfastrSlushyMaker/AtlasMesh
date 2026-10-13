@@ -12,6 +12,7 @@ import { confirmAction } from '../shell/confirm';
 import { RunLocally } from '../shell/RunLocally';
 import { setApp, useApp } from '../state';
 import { storage } from '../lib/api';
+import { parseUrl, syncUrlSoon } from '../lib/url';
 import './intel.css';
 
 const emptyFilters = (): GraphFilters => ({ types: new Set(), platforms: new Set(), claims: new Set(), minConfidence: 0, showHidden: false, showRejected: false });
@@ -45,11 +46,30 @@ function KeyGate({ onUnlock }: { onUnlock: () => void }) {
 }
 
 export default function Workspace() {
-  const [access, setAccess] = useState<'checking' | 'ok' | 'locked' | 'showcase'>('checking');
+  const [access, setAccess] = useState<'checking' | 'ok' | 'locked' | 'showcase' | 'unavailable'>('checking');
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    osint.access().then((r: any) => setAccess(r.showcase ? 'showcase' : r.ok ? 'ok' : 'locked')).catch(() => setAccess('ok'));
-  }, []);
+    let disposed = false;
+    setAccess('checking');
+    osint.access().then((r) => {
+      if (!disposed) setAccess(r.showcase ? 'showcase' : r.ok ? 'ok' : 'locked');
+    }).catch(() => {
+      if (!disposed) setAccess('unavailable');
+    });
+    return () => { disposed = true; };
+  }, [attempt]);
   if (access === 'checking') return <div className="intel" style={{ display: 'grid', placeItems: 'center' }}><div className="spinner" /></div>;
+  if (access === 'unavailable') {
+    return (
+      <div className="intel" style={{ display: 'grid', placeItems: 'center' }}>
+        <div className="panel pad" role="alert" style={{ maxWidth: 440 }}>
+          <h2 className="panel-title">The Intel workspace can’t connect</h2>
+          <p className="muted">The server couldn’t confirm workspace access. Check the connection and try again.</p>
+          <button className="btn btn-primary" onClick={() => setAttempt((n) => n + 1)}>Try again</button>
+        </div>
+      </div>
+    );
+  }
   if (access === 'showcase') {
     return (
       <div className="intel scroll" style={{ display: 'block', gridTemplateAreas: 'none' }}>
@@ -83,24 +103,31 @@ function WorkspaceInner() {
   const [llm, setLlm] = useState(false);
   const [mview, setMview] = useState<MView>('graph');
   const seedFromGlobe = useApp((s) => s.intelSeed);
-  const loading = useRef(false);
+  const request = useRef<{ id: string; controller: AbortController } | null>(null);
+  const currentId = useRef(invId);
+  const prevJob = useRef<any>(null);
+  currentId.current = invId;
 
   const loadList = useCallback(() => osint.list().then((r) => setList(r.investigations)).catch(() => {}), []);
 
   const refresh = useCallback(async () => {
-    if (!invId || loading.current) return;
-    loading.current = true;
+    if (!invId || currentId.current !== invId || request.current?.id === invId) return;
+    request.current?.controller.abort();
+    const pending = { id: invId, controller: new AbortController() };
+    request.current = pending;
     try {
-      const full = await osint.get(invId);
+      const full = await osint.get(invId, { signal: pending.controller.signal });
+      if (request.current !== pending || currentId.current !== invId) return;
       setInv(full);
       setJob(full.runningJob);
     } catch (err: any) {
+      if (request.current !== pending || pending.controller.signal.aborted || currentId.current !== invId) return;
       if (err.status === 404) {
         setInvId(null);
         setInv(null);
       } else toast(err.message, 'error');
     } finally {
-      loading.current = false;
+      if (request.current === pending) request.current = null;
     }
   }, [invId]);
 
@@ -111,15 +138,22 @@ function WorkspaceInner() {
 
   useEffect(() => {
     storage.set('intel:last', invId);
+    syncUrlSoon();
     setSelected([]);
     setHighlight(null);
     setCollapsed(new Set());
     setFilters(emptyFilters());
     setInv(null);
+    setJob(null);
+    prevJob.current = null;
     if (invId) {
       refresh();
       setMview('graph');
     } else setMview('cases');
+    return () => {
+      request.current?.controller.abort();
+      request.current = null;
+    };
   }, [invId]);
 
   // Globe → Intel hand-off opens the new-investigation form prefilled.
@@ -137,7 +171,6 @@ function WorkspaceInner() {
     return () => clearInterval(t);
   }, [job?.id, job?.status, refresh]);
 
-  const prevJob = useRef<any>(null);
   useEffect(() => {
     if (prevJob.current && !job) {
       const done = inv?.jobs.find((j) => j.id === prevJob.current.id);
@@ -147,10 +180,20 @@ function WorkspaceInner() {
     prevJob.current = job;
   }, [job]);
 
+  useEffect(() => {
+    const onHash = () => {
+      const parsed = parseUrl();
+      if (parsed.mode === 'intel' && parsed.inv) setInvId(parsed.inv);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
   const expand = useCallback(async (nodeId: string, opts: { depth?: number; connectors?: string[]; force?: boolean } = {}) => {
     if (!inv) return;
     try {
       const r = await osint.expand(inv.id, nodeId, opts);
+      if (currentId.current !== inv.id) return;
       setJob(r.job);
       if (window.innerWidth >= 900) setDockTab('log');
       toast(`Querying sources for ${inv.nodes[nodeId]?.label}`, 'info');

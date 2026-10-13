@@ -3,6 +3,7 @@ import * as Cesium from 'cesium';
 import type { Entity } from '../../../shared/entity';
 import { onDiff } from '../lib/live';
 import { entityIndex, touchIndex } from './index';
+import { applyLayerDiff, clearLayerEntities } from './layerDiff';
 
 export interface LayerSpec {
   type: string;
@@ -51,10 +52,15 @@ export function useLayer(viewer: Cesium.Viewer | null, visible: boolean, spec: L
         }
       });
     }
-    viewer.dataSources.add(ds);
+    // Cesium adds even a plain data source in a microtask. Cleanup can run
+    // before that resolves, so remove a late registration too.
+    let disposed = false;
+    void viewer.dataSources.add(ds).then(() => {
+      if (disposed && !viewer.isDestroyed()) viewer.dataSources.remove(ds, true);
+    });
     return () => {
-      for (const id of map.current.keys()) entityIndex.delete(id);
-      map.current.clear();
+      disposed = true;
+      clearLayerEntities(ds, map.current, specRef.current, entityIndex);
       touchIndex();
       if (!viewer.isDestroyed()) viewer.dataSources.remove(ds, true);
       dsRef.current = null;
@@ -67,9 +73,7 @@ export function useLayer(viewer: Cesium.Viewer | null, visible: boolean, spec: L
     ds.show = visible;
     if (!visible) {
       // Free memory: the server stops sending this layer and resends a snapshot when re-enabled.
-      ds.entities.removeAll();
-      for (const id of map.current.keys()) entityIndex.delete(id);
-      map.current.clear();
+      clearLayerEntities(ds, map.current, specRef.current, entityIndex);
       touchIndex();
     }
     viewer.scene.requestRender();
@@ -80,52 +84,7 @@ export function useLayer(viewer: Cesium.Viewer | null, visible: boolean, spec: L
     return onDiff((diff) => {
       const ds = dsRef.current;
       if (!ds || !ds.show || viewer.isDestroyed()) return;
-      const s = specRef.current;
-      const type = s.type;
-      let touched = false;
-      ds.entities.suspendEvents();
-      try {
-        if (diff.snapshot?.includes(type)) {
-          ds.entities.removeAll();
-          for (const id of map.current.keys()) entityIndex.delete(id);
-          map.current.clear();
-          touched = true;
-        }
-        const upsert = (e: Entity) => {
-          if (e.type !== type) return;
-          touched = true;
-          entityIndex.set(e.id, e);
-          const existing = map.current.get(e.id);
-          try {
-            if (existing && s.update) {
-              s.update(existing, e, ds);
-            } else {
-              if (existing) {
-                s.onRemove?.(e.id, ds);
-                ds.entities.remove(existing);
-              }
-              const ent = s.create(e, ds);
-              if (ent) map.current.set(e.id, ent);
-              else map.current.delete(e.id);
-            }
-          } catch (err) {
-            console.warn(`[layer:${type}] failed for ${e.id}`, err);
-          }
-        };
-        diff.added?.forEach(upsert);
-        diff.updated?.forEach(upsert);
-        for (const id of diff.removed || []) {
-          const ent = map.current.get(id);
-          if (!ent) continue;
-          touched = true;
-          s.onRemove?.(id, ds);
-          ds.entities.remove(ent);
-          map.current.delete(id);
-          entityIndex.delete(id);
-        }
-      } finally {
-        ds.entities.resumeEvents();
-      }
+      const touched = applyLayerDiff(diff, ds, map.current, specRef.current, entityIndex);
       if (touched) {
         touchIndex();
         viewer.scene.requestRender();

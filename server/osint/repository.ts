@@ -13,6 +13,7 @@ export interface InvestigationRepository {
   get(id: string): Investigation | undefined;
   save(inv: Investigation): void;
   delete(id: string): boolean;
+  flush(): void;
 }
 
 const DATA_DIR = path.resolve(process.env.OSINT_DATA_DIR || path.join(process.cwd(), 'data', 'osint'));
@@ -60,6 +61,16 @@ class FileRepository implements InvestigationRepository {
     return this.cache.get(id);
   }
 
+  private write(inv: Investigation) {
+    try {
+      const file = path.join(DATA_DIR, `${inv.id}.json`);
+      fs.writeFileSync(`${file}.tmp`, JSON.stringify(inv));
+      fs.renameSync(`${file}.tmp`, file);
+    } catch (err: any) {
+      console.warn('[osint] save failed:', err?.message);
+    }
+  }
+
   save(inv: Investigation) {
     inv.updatedAt = Date.now();
     this.cache.set(inv.id, inv);
@@ -69,25 +80,32 @@ class FileRepository implements InvestigationRepository {
       inv.id,
       setTimeout(() => {
         this.timers.delete(inv.id);
-        try {
-          const file = path.join(DATA_DIR, `${inv.id}.json`);
-          fs.writeFileSync(`${file}.tmp`, JSON.stringify(inv));
-          fs.renameSync(`${file}.tmp`, file);
-        } catch (err: any) {
-          console.warn('[osint] save failed:', err?.message);
-        }
+        this.write(inv);
       }, 500)
     );
   }
 
   delete(id: string) {
+    clearTimeout(this.timers.get(id));
+    this.timers.delete(id);
     const had = this.cache.delete(id);
+    if (!had) return false;
     try {
       fs.unlinkSync(path.join(DATA_DIR, `${id}.json`));
     } catch {
       // already gone
     }
     return had;
+  }
+
+  /** Commit debounced saves before a deployment/restart stops the process. */
+  flush() {
+    for (const [id, timer] of this.timers) {
+      clearTimeout(timer);
+      const inv = this.cache.get(id);
+      if (inv) this.write(inv);
+    }
+    this.timers.clear();
   }
 }
 

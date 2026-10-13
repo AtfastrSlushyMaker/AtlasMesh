@@ -1,12 +1,41 @@
 import { useEffect, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
-import { createViewer, setBasemap, setOverlay, Overlay } from './engine';
+import { createViewer, setBasemap, setOverlay, clearOverlays, Basemap, Overlay } from './engine';
 import { LAYER_COMPONENTS } from './layers';
 import { LAYERS, LAYER_BY_ID } from '../lib/layers';
 import { entityIndex, displayName } from './index';
 import { setSubscribedLayers, startLive } from '../lib/live';
-import { setApp, setViewer, useApp, getApp } from '../state';
+import { setApp, setViewer, useApp } from '../state';
 import { fmtAltitude, fmtDMS } from '../lib/format';
+import { toast } from '../shell/toast';
+
+function useImageryOverlay(viewer: Cesium.Viewer | null, id: Overlay, on: boolean, basemap: Basemap) {
+  // Only place names depend on the base map's label colour.
+  const style = id === 'labels' ? basemap : 'satellite';
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    if (!on) {
+      void setOverlay(viewer, id, false, style);
+      return;
+    }
+    let disposed = false;
+    let loaded = false;
+    const refresh = () => {
+      setOverlay(viewer, id, true, style).then(() => { loaded = true; }).catch((error) => {
+        if (disposed) return;
+        if (!loaded) setApp((s) => ({ overlays: { ...s.overlays, [id]: false } }));
+        toast(loaded ? 'Rain radar could not refresh. Keeping the last image.' : error.message || 'This imagery overlay could not be loaded.', 'error');
+      });
+    };
+    refresh();
+    const timer = id === 'radar' ? window.setInterval(refresh, 10 * 60 * 1000) : null;
+    return () => {
+      disposed = true;
+      if (timer !== null) clearInterval(timer);
+      void setOverlay(viewer, id, false, style);
+    };
+  }, [viewer, id, on, style]);
+}
 
 /** Resolve the data id behind a picked Cesium object (tracks/trails map back to their parent). */
 function pickedId(picked: any): string | null {
@@ -24,7 +53,7 @@ function pickedId(picked: any): string | null {
 
 export function currentPosition(id: string): { lat: number; lon: number; alt: number } | null {
   const viewer = (window as any).__atlasViewer as Cesium.Viewer | undefined;
-  if (!viewer) return null;
+  if (!viewer || viewer.isDestroyed()) return null;
   for (let i = 0; i < viewer.dataSources.length; i++) {
     const ent = viewer.dataSources.get(i).entities.getById(id);
     const p = ent?.position?.getValue(viewer.clock.currentTime);
@@ -70,7 +99,7 @@ export function Globe() {
       const picked = v.scene.pick(click.position);
       if (Array.isArray(picked?.id)) {
         // Cluster: zoom in on it
-        const p = v.scene.pickPosition(click.position) || v.camera.pickEllipsoid(click.position);
+        const p = (v.scene.pickPositionSupported ? v.scene.pickPosition(click.position) : undefined) || v.camera.pickEllipsoid(click.position);
         if (p) {
           const c = Cesium.Cartographic.fromCartesian(p);
           v.camera.flyTo({ destination: Cesium.Cartesian3.fromRadians(c.longitude, c.latitude, Math.max(v.camera.positionCartographic.height / 3, 20000)), duration: 0.9 });
@@ -109,6 +138,7 @@ export function Globe() {
 
     return () => {
       handler.destroy();
+      clearOverlays(v);
       setViewer(null);
       setLocalViewer(null);
       (window as any).__atlasViewer = undefined;
@@ -121,27 +151,15 @@ export function Globe() {
     setSubscribedLayers(LAYERS.filter((l) => visibility[l.id]).map((l) => l.id));
   }, [visibility]);
 
-  const appliedBasemap = useRef<string | null>(null);
-  useEffect(() => {
-    if (!viewer || viewer.isDestroyed() || appliedBasemap.current === basemap) return;
-    const first = appliedBasemap.current === null;
-    appliedBasemap.current = basemap;
-    setBasemap(viewer, basemap);
-    // Label colours follow the basemap; the overlay effect handles the first load.
-    if (!first && getApp().overlays.labels) setOverlay(viewer, 'labels', true, basemap);
-  }, [viewer, basemap]);
-
-  const appliedOverlays = useRef<Record<string, boolean>>({});
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
-    for (const [id, on] of Object.entries(overlays)) {
-      if (!!appliedOverlays.current[id] === on) continue;
-      appliedOverlays.current[id] = on;
-      setOverlay(viewer, id as Overlay, on, basemap).catch(() => {
-        appliedOverlays.current[id] = false;
-      });
-    }
-  }, [viewer, overlays, basemap]);
+    setBasemap(viewer, basemap);
+  }, [viewer, basemap]);
+
+  useImageryOverlay(viewer, 'labels', overlays.labels, basemap);
+  useImageryOverlay(viewer, 'radar', overlays.radar, basemap);
+  useImageryOverlay(viewer, 'clouds', overlays.clouds, basemap);
+  useImageryOverlay(viewer, 'nightlights', overlays.nightlights, basemap);
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -152,13 +170,18 @@ export function Globe() {
   // Selection ring follows the selected entity
   useEffect(() => {
     if (!viewer || viewer.isDestroyed() || !selectedId) return;
-    let target: Cesium.Entity | undefined;
-    for (let i = 0; i < viewer.dataSources.length && !target; i++) target = viewer.dataSources.get(i).entities.getById(selectedId);
-    if (!target?.position) return;
-    const t = target;
-    // Read the target's current position each frame: moving layers replace their position property on update.
+    // Snapshots and static updates replace entities. Resolve the selected id
+    // each time rather than holding a graphics object that may have been removed.
     const ring = viewer.entities.add({
-      position: new Cesium.CallbackPositionProperty((time) => t.position?.getValue(time ?? viewer.clock.currentTime), false) as any,
+      position: new Cesium.CallbackPositionProperty((time) => {
+        for (let i = 0; i < viewer.dataSources.length; i++) {
+          const ds = viewer.dataSources.get(i);
+          if (!ds.show) continue;
+          const target = ds.entities.getById(selectedId);
+          if (target?.position) return target.position.getValue(time ?? viewer.clock.currentTime);
+        }
+        return undefined;
+      }, false) as any,
       point: { pixelSize: 26, color: Cesium.Color.TRANSPARENT, outlineColor: Cesium.Color.fromCssColorString('#f2c230'), outlineWidth: 3, disableDepthTestDistance: 0 },
     });
     viewer.scene.requestRender();

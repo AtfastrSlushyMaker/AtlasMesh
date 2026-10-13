@@ -1,5 +1,6 @@
 import dns from 'dns/promises';
 import net from 'net';
+import type { AxiosRequestConfig } from 'axios';
 import { client, USER_AGENT } from '../lib/http';
 
 /**
@@ -17,32 +18,24 @@ const PRIVATE_V4: Array<[string, number]> = [
   ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['224.0.0.0', 4], ['240.0.0.0', 4],
 ];
 
-function v4ToInt(ip: string) {
-  return ip.split('.').reduce((acc, o) => (acc << 8) + Number(o), 0) >>> 0;
-}
+const blocked = new net.BlockList();
+for (const [base, bits] of PRIVATE_V4) blocked.addSubnet(base, bits, 'ipv4');
+blocked.addAddress('::', 'ipv6');
+blocked.addAddress('::1', 'ipv6');
+blocked.addSubnet('fe80::', 10, 'ipv6');
+blocked.addSubnet('fc00::', 7, 'ipv6');
+blocked.addSubnet('ff00::', 8, 'ipv6');
 
 export function isPrivateAddress(ip: string): boolean {
-  if (net.isIPv4(ip)) {
-    const n = v4ToInt(ip);
-    return PRIVATE_V4.some(([base, bits]) => {
-      const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
-      return (n & mask) === (v4ToInt(base) & mask);
-    });
-  }
-  if (net.isIPv6(ip)) {
-    const l = ip.toLowerCase();
-    if (l === '::1' || l === '::') return true;
-    if (l.startsWith('fe80') || l.startsWith('fc') || l.startsWith('fd') || l.startsWith('ff')) return true;
-    const mapped = l.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPrivateAddress(mapped[1]);
-    return false;
-  }
-  return true;
+  const family = net.isIP(ip);
+  // BlockList also checks IPv4-mapped IPv6, including its hexadecimal forms.
+  return !family || blocked.check(ip, family === 6 ? 'ipv6' : 'ipv4');
 }
 
 export class SafetyError extends Error {}
+type RequestGate = () => Promise<void> | void;
 
-export async function assertPublicUrl(raw: string): Promise<URL> {
+async function resolvePublicUrl(raw: string) {
   let url: URL;
   try {
     url = new URL(raw);
@@ -56,33 +49,58 @@ export async function assertPublicUrl(raw: string): Promise<URL> {
   if (/^(localhost|.*\.local|.*\.internal|metadata\.google\.internal)$/i.test(host)) {
     throw new SafetyError('Local hostnames are not allowed');
   }
-  const addrs = net.isIP(host) ? [{ address: host }] : await dns.lookup(host, { all: true });
+  const addrs = net.isIP(host) ? [{ address: host, family: net.isIP(host) }] : await dns.lookup(host, { all: true });
   if (!addrs.length || addrs.some((a) => isPrivateAddress(a.address))) {
     throw new SafetyError(`${host} resolves to a non-public address`);
   }
-  return url;
+  return { url, addrs };
 }
 
-/** Fetch a public web page with SSRF checks on every redirect hop. */
-export async function safeFetchPage(raw: string, maxBytes = 1.5 * 1024 * 1024) {
+export async function assertPublicUrl(raw: string): Promise<URL> {
+  return (await resolvePublicUrl(raw)).url;
+}
+
+/** Validate each redirect and pin the socket lookup to the addresses we checked. */
+export async function safeGet(raw: string, config: AxiosRequestConfig = {}, checkRobots = false, beforeRequest?: RequestGate) {
   let current = raw;
-  for (let hop = 0; hop < 4; hop++) {
-    const url = await assertPublicUrl(current);
+  const maxRedirects = Math.max(0, Math.min(config.maxRedirects ?? 5, 5));
+  let headers = { ...config.headers };
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const { url, addrs } = await resolvePublicUrl(current);
+    if (checkRobots && !(await robotsAllows(url.toString(), beforeRequest))) throw new SafetyError(`robots.txt disallows ${url}`);
+    const address = addrs.find((a) => a.family === 4) || addrs[0];
+    await beforeRequest?.();
     const res = await client.get(url.toString(), {
-      responseType: 'text',
+      ...config,
+      headers,
+      // A second DNS resolution could return a private address after validation.
+      lookup: (_host, options: any, cb: any) => cb(null, options.all ? [address] : address.address, address.family),
+      family: address.family as 4 | 6,
+      proxy: false,
+      httpVersion: 1,
       maxRedirects: 0,
-      maxContentLength: maxBytes,
-      timeout: 15000,
-      validateStatus: (s) => s < 400 || (s >= 300 && s < 400),
-      headers: { Accept: 'text/html,application/xhtml+xml', 'User-Agent': USER_AGENT },
+      validateStatus: (s) => (s >= 300 && s < 400) || (config.validateStatus ? config.validateStatus(s) : s >= 200 && s < 300),
     });
     if (res.status >= 300 && res.status < 400 && res.headers.location) {
-      current = new URL(res.headers.location, url).toString();
+      const target = new URL(res.headers.location, url);
+      if (target.origin !== url.origin) {
+        headers = Object.fromEntries(Object.entries(headers).filter(([key]) => !['authorization', 'cookie', 'proxy-authorization'].includes(key.toLowerCase())));
+      }
+      current = target.toString();
       continue;
     }
-    return { url: url.toString(), html: String(res.data), contentType: String(res.headers['content-type'] || '') };
+    return { url: url.toString(), response: res };
   }
   throw new SafetyError('Too many redirects');
+}
+
+/** Fetch a public page, enforcing robots.txt on every destination too. */
+export async function safeFetchPage(raw: string, maxBytes = 1.5 * 1024 * 1024, beforeRequest?: RequestGate) {
+  const { url, response } = await safeGet(raw, {
+    responseType: 'text', maxContentLength: maxBytes, timeout: 15000,
+    headers: { Accept: 'text/html,application/xhtml+xml', 'User-Agent': USER_AGENT },
+  }, true, beforeRequest);
+  return { url, html: String(response.data), contentType: String(response.headers['content-type'] || '') };
 }
 
 const robotsCache = new Map<string, { at: number; allow: RegExp[]; disallow: RegExp[] }>();
@@ -95,7 +113,7 @@ function robotsPattern(p: string) {
 }
 
 /** robots.txt check for "*" and our own agent token, with Allow/Disallow precedence by specificity. */
-export async function robotsAllows(raw: string): Promise<boolean> {
+export async function robotsAllows(raw: string, beforeRequest?: RequestGate): Promise<boolean> {
   const url = new URL(raw);
   const origin = url.origin;
   let entry = robotsCache.get(origin);
@@ -103,8 +121,8 @@ export async function robotsAllows(raw: string): Promise<boolean> {
     const allow: RegExp[] = [];
     const disallow: RegExp[] = [];
     try {
-      await assertPublicUrl(`${origin}/robots.txt`);
-      const res = await client.get(`${origin}/robots.txt`, { responseType: 'text', timeout: 8000, maxRedirects: 3, validateStatus: () => true });
+      const { response: res } = await safeGet(`${origin}/robots.txt`, { responseType: 'text', timeout: 8000, maxContentLength: 512 * 1024, validateStatus: () => true }, false, beforeRequest);
+      if (res.status >= 500) throw new SafetyError(`robots.txt is unavailable for ${origin}`);
       if (res.status < 400) {
         let agents: string[] = [];
         let inRules = false;
@@ -129,8 +147,9 @@ export async function robotsAllows(raw: string): Promise<boolean> {
           (key === 'allow' ? allow : disallow).push(robotsPattern(val));
         }
       }
-    } catch {
-      // unreachable robots.txt → treat as allowed; the page fetch is still SSRF-checked
+    } catch (err) {
+      // Network failures and exhausted budgets must not silently permit a crawl.
+      throw err;
     }
     entry = { at: Date.now(), allow, disallow };
     robotsCache.set(origin, entry);

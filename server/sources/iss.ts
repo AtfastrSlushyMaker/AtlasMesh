@@ -7,12 +7,6 @@ export type ISSPollOptions = {
 
 const ISS_API = 'https://api.wheretheiss.at/v1/satellites/25544';
 
-const TLE_FALLBACK = {
-  name: 'ISS (ZARYA)',
-  tle1: '1 25544U 98067A   26122.84576389  .00016480  00000+0  29688-3 0  9994',
-  tle2: '2 25544  51.6410 346.7210 0004767  69.3854  27.3319 15.50084214510620',
-};
-
 export function startISSSource(
   onEntities: (entities: Entity[]) => void,
   opts?: ISSPollOptions
@@ -30,7 +24,9 @@ export function startISSSource(
       const lon = parseFloat(d.longitude);
       const altKm = parseFloat(d.altitude);
 
-      if (isNaN(lat) || isNaN(lon)) return;
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(altKm) || !Number.isFinite(d.timestamp)) {
+        throw new Error('wheretheiss.at returned an invalid position');
+      }
 
       const entities: Entity[] = [{
 
@@ -39,9 +35,9 @@ export function startISSSource(
         position: {
           lat,
           lon,
-          alt: isNaN(altKm) ? 420000 : altKm * 1000,
+          alt: altKm * 1000,
         },
-        timestamp: Date.now(),
+        timestamp: d.timestamp * 1000,
         metadata: {
           name: 'International Space Station',
           velocityKms: d.velocity ? parseFloat(d.velocity) : undefined,
@@ -57,20 +53,8 @@ export function startISSSource(
     } catch (err: any) {
       console.warn('[ISS] API error:', err?.message || err);
 
-      // Fallback: send ISS as a TLE-based satellite so client propagates it
-      const entities: Entity[] = [{
-        id: 'iss:25544:tle',
-        type: 'iss',
-        position: { lat: 0, lon: 0, alt: 0 },
-        timestamp: Date.now(),
-        metadata: {
-          name: 'International Space Station',
-          tle1: TLE_FALLBACK.tle1,
-          tle2: TLE_FALLBACK.tle2,
-          isTLEFallback: true,
-        },
-      }];
-      onEntities(entities);
+      // Keep the last real observation. An old hard-coded orbit would look live
+      // while placing the station at an incorrect position during an outage.
     } finally {
       if (!stopped) {
         timer = setTimeout(fetchAndEmit, intervalMs);

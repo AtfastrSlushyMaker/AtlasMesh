@@ -18,6 +18,13 @@ export type Retention =
 
 const DEFAULT_RETENTION: Retention = { mode: 'snapshot' };
 
+// These timestamps describe an observation/event, rather than the time a
+// static dataset was downloaded. Stationary reports still need to reach the UI.
+const OBSERVATION_TYPES = new Set<EntityType>([
+  'aircraft', 'ship', 'iss', 'weather', 'buoy', 'earthquake', 'disaster',
+  'event', 'wildfire', 'fireball', 'launch',
+]);
+
 function shallowMetaEqual(a: Record<string, any> = {}, b: Record<string, any> = {}) {
   const ak = Object.keys(a);
   const bk = Object.keys(b);
@@ -64,6 +71,7 @@ class EntityStore {
     for (const ent of incoming) {
       if (!ent || ent.type !== type) continue;
       if (!Number.isFinite(ent.position?.lat) || !Number.isFinite(ent.position?.lon)) continue;
+      if (Math.abs(ent.position.lat) > 90 || Math.abs(ent.position.lon) > 180) continue;
       seen.add(ent.id);
       this.lastSeen.set(ent.id, now);
 
@@ -79,9 +87,11 @@ class EntityStore {
         ent.position.alt !== existing.position.alt ||
         ent.heading !== existing.heading ||
         ent.velocity !== existing.velocity ||
+        (OBSERVATION_TYPES.has(type) && ent.timestamp !== existing.timestamp) ||
         !shallowMetaEqual(ent.metadata, existing.metadata);
+      // Keep snapshots fresh without rebroadcasting an unchanged static dataset.
+      bucket.set(ent.id, ent);
       if (changed) {
-        bucket.set(ent.id, ent);
         updated.push(ent);
       }
     }
@@ -162,7 +172,7 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
   const dLat = (lat2 - lat1) * toRad;
   const dLon = (lon2 - lon1) * toRad;
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
+  return 2 * R * Math.asin(Math.sqrt(Math.max(0, Math.min(1, a))));
 }
 
 export const store = new EntityStore();
