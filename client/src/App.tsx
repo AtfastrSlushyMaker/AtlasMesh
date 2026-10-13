@@ -182,7 +182,7 @@ export default function App() {
   useEffect(() => {
     api<{ mode: 'full' | 'showcase'; repoUrl: string; image: string }>('/api/config')
       .then((server) => setApp({ server }))
-      .catch(() => setApp({ server: { mode: 'full', repoUrl: '', image: '' } }));
+      .catch(() => setApp({ server: null }));
   }, []);
 
   useEffect(() => {

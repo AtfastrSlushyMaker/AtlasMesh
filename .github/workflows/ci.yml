@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t atlasmesh:check .
+      - run: docker build --pull -t atlasmesh:check .
       - name: Scan runtime image
         uses: aquasecurity/trivy-action@v0.36.0
         with:

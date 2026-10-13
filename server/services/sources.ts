@@ -1,4 +1,6 @@
 import type { EntityType, SourceInfo } from '../../shared/entity';
+import { redactSecrets } from '../lib/secrets';
+import { isShowcase } from '../lib/access';
 
 export interface SourceDef {
   id: string;
@@ -56,7 +58,7 @@ class SourceRegistry {
 
   reportError(id: string, message: string) {
     const s = this.states.get(id);
-    if (s) s.lastError = message;
+    if (s) s.lastError = redactSecrets(message).slice(0, 200);
   }
 
   list(): SourceInfo[] {
@@ -79,7 +81,7 @@ class SourceRegistry {
         lastUpdate: s.lastUpdate,
         lastError: s.lastError,
         note: s.disabled
-          ? `Add ${(s.def.requires ?? []).join(', ')} in Settings to turn this on`
+          ? isShowcase() ? 'This feed is unavailable on the public demo.' : `Add ${(s.def.requires ?? []).join(', ')} in Settings to turn this on`
           : typeof (s.def as any).noteFn === 'function' ? (s.def as any).noteFn() : s.def.note,
       };
     });

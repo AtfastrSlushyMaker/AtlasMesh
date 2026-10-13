@@ -34,6 +34,10 @@ export function isPrivateAddress(ip: string): boolean {
 
 export class SafetyError extends Error {}
 type RequestGate = () => Promise<void> | void;
+const CREDENTIAL_HEADERS = new Set([
+  'authorization', 'cookie', 'proxy-authorization', 'x-api-key', 'api-key', 'apikey',
+  'x-auth-token', 'x-access-token', 'x-atlas-key', 'x-client-secret', 'x-authorization',
+]);
 
 async function resolvePublicUrl(raw: string) {
   let url: URL;
@@ -84,7 +88,7 @@ export async function safeGet(raw: string, config: AxiosRequestConfig = {}, chec
     if (res.status >= 300 && res.status < 400 && res.headers.location) {
       const target = new URL(res.headers.location, url);
       if (target.origin !== url.origin) {
-        headers = Object.fromEntries(Object.entries(headers).filter(([key]) => !['authorization', 'cookie', 'proxy-authorization'].includes(key.toLowerCase())));
+        headers = Object.fromEntries(Object.entries(headers).filter(([key]) => !CREDENTIAL_HEADERS.has(key.toLowerCase())));
       }
       current = target.toString();
       continue;

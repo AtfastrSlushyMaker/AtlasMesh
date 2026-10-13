@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { client } from '../lib/http';
+import { redactSecrets } from '../lib/secrets';
 
 /** Check a key against its service without saving it. */
 export async function testSetting(key: string, value: string, pair?: string): Promise<{ ok: boolean; message: string }> {
@@ -31,13 +32,13 @@ export async function testSetting(key: string, value: string, pair?: string): Pr
         const done = (r: { ok: boolean; message: string }) => {
           clearTimeout(t);
           try { ws.close(); } catch { /* closed */ }
-          resolve(r);
+          resolve({ ...r, message: redactSecrets(r.message, [value, pair]).slice(0, 160) });
         };
         const t = setTimeout(() => done({ ok: false, message: 'No data within 12 seconds. The key may be wrong, or the service is slow; try again.' }), 12000);
         ws.on('open', () => ws.send(JSON.stringify({ APIKey: value, BoundingBoxes: [[[-90, -180], [90, 180]]], FilterMessageTypes: ['PositionReport'] })));
         ws.on('message', (m) => {
           const text = m.toString();
-          if (/error/i.test(text) && text.length < 300) done({ ok: false, message: `AISStream: ${text.slice(0, 160)}` });
+          if (/error/i.test(text) && text.length < 300) done({ ok: false, message: `AISStream: ${text}` });
           else done({ ok: true, message: 'Key accepted · ship positions are streaming.' });
         });
         ws.on('close', () => done({ ok: false, message: 'AISStream closed the connection. The key was probably rejected.' }));

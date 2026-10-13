@@ -246,14 +246,13 @@ function ShowcaseNotice() {
   return (
     <div className="key-card" style={{ marginTop: 16, borderTop: '4px solid var(--accent)' }}>
       <div className="setting-label" style={{ marginBottom: 6 }}>This is the public demo</div>
-      <p className="setting-help" style={{ marginBottom: 14 }}>API keys and the Intel workspace are off here, so nobody’s keys or lookups run on a shared server. Run your own copy to use them:</p>
+      <p className="setting-help" style={{ marginBottom: 14 }}>This demo shows live globe data. API-key setup and investigations are available in a local copy:</p>
       <RunLocally compact />
     </div>
   );
 }
 
 function Keys() {
-  const showcase = useApp((s) => s.server?.mode === 'showcase');
   const [data, setData] = useState<SettingsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -277,7 +276,6 @@ function Keys() {
       <p className="muted" style={{ fontSize: 14.5 }}>
         Every key is optional. Keys are stored on the server in <code>server/data/settings.json</code>, never in this browser, and are shown masked. Feeds that use a key restart as soon as you save it.
       </p>
-      {showcase && <ShowcaseNotice />}
       {error && <p role="alert" style={{ color: 'var(--bad)' }}>Settings couldn’t be loaded: {error}. Check that the server is running.</p>}
       {!data && !error && <div className="skeleton" style={{ height: 120 }} />}
       {data && (
@@ -291,7 +289,7 @@ function Keys() {
               <div key={k} className="stat"><div className="num" style={{ fontSize: 20 }}>{v}</div><div className="label">{k}</div></div>
             ))}
           </div>
-          {!data.canEdit && !showcase && (
+          {!data.canEdit && (
             <div className="key-card" style={{ borderColor: 'var(--warn)', marginTop: 12 }}>
               <div className="setting-label">Read only</div>
               <p className="setting-help">{data.reason}</p>
@@ -305,7 +303,7 @@ function Keys() {
               </form>
             </div>
           )}
-          {!showcase && groups.map(([group, list]) => (
+          {groups.map(([group, list]) => (
             <div key={group} style={{ marginTop: 26 }}>
               <h3 className="section-title" style={{ fontSize: 16, marginBottom: 10, color: 'var(--text)' }}>{group}</h3>
               {list.map((s) => (
@@ -328,7 +326,6 @@ function Keys() {
 }
 
 function IntelSection() {
-  const showcase = useApp((s) => s.server?.mode === 'showcase');
   const d = useApp((s) => s.prefs.intelDefaults);
   const set = (patch: Partial<typeof d>) => setPrefs({ intelDefaults: { ...d, ...patch } });
   const [key, setKey] = useState('');
@@ -336,7 +333,6 @@ function IntelSection() {
   return (
     <section aria-labelledby="s-intel">
       <h2 id="s-intel" className="panel-title" style={{ fontSize: 28 }}>Intel workspace</h2>
-      {showcase && <ShowcaseNotice />}
       <p className="muted" style={{ fontSize: 14.5 }}>Defaults for new investigations. Each investigation can change its own limits later.</p>
       <Row label="Follow depth" help="How many steps discovery may follow strong leads from the entity you expand.">
         <Seg label="Follow depth" value={String(d.maxDepth) as '1' | '2' | '3'} onChange={(v) => set({ maxDepth: Number(v) })} options={[['1', 'Only that entity'], ['2', '1 step'], ['3', '2 steps']]} />
@@ -385,7 +381,13 @@ function About() {
 }
 
 export function Settings() {
-  const section = useApp((s) => s.settings);
+  const requestedSection = useApp((s) => s.settings);
+  const serverMode = useApp((s) => s.server?.mode);
+  const full = serverMode === 'full';
+  // Credentials stay unmounted until the server explicitly enables them, even
+  // if an older UI action selected a section before its config arrived.
+  const section = !full && (requestedSection === 'keys' || requestedSection === 'intel') ? 'general' : requestedSection;
+  const sections = full ? SECTIONS : SECTIONS.filter((s) => s.id !== 'keys' && s.id !== 'intel');
   const mainRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!section) return;
@@ -404,7 +406,7 @@ export function Settings() {
         <h1 id="settings-title" className="panel-title" style={{ fontSize: 20 }}>Settings</h1>
       </div>
       <nav className="settings-nav" aria-label="Settings sections">
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <button key={s.id} aria-current={section === s.id ? 'page' : undefined} onClick={() => setApp({ settings: s.id })}>
             <Icon path={s.icon} size={18} />{s.label}
           </button>
@@ -412,9 +414,10 @@ export function Settings() {
       </nav>
       <div className="settings-main scroll" ref={mainRef}>
         {section === 'general' && <General />}
+        {section === 'general' && serverMode === 'showcase' && <ShowcaseNotice />}
         {section === 'globe' && <GlobeSection />}
-        {section === 'keys' && <Keys />}
-        {section === 'intel' && <IntelSection />}
+        {full && section === 'keys' && <Keys />}
+        {full && section === 'intel' && <IntelSection />}
         {section === 'about' && <About />}
       </div>
     </div>

@@ -36,6 +36,8 @@ Only unexpired disk caches are used. When a refresh fails, the globe retains the
 
 The public site at atlasmesh.onrender.com is a **showcase**: the live globe only. The Intel workspace and API keys run on your own machine, so nobody's keys or lookups go through a shared server.
 
+Demo Settings contain only display preferences and data credits. API-key entry and Intel settings appear only in a full local copy, after its server confirms the mode. Keep feed credentials in Render's environment settings; do not give them a `VITE_` prefix or put them in client code.
+
 **Docker** (recommended):
 
 ```bash

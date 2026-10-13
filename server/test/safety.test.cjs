@@ -47,14 +47,35 @@ test('socket lookup uses the validated DNS address and cross-origin redirects dr
       ? { status: 302, headers: { location: 'https://other.example/final' } }
       : { status: 200, headers: {}, data: { ok: true } };
   });
-  const result = await safeGet('https://safe.example/start', { headers: { Authorization: 'token', Cookie: 'secret', Accept: 'application/json' } });
+  const credentials = {
+    Authorization: 'token', Cookie: 'secret', 'Proxy-Authorization': 'proxy-token',
+    'X-API-Key': 'fabricated-api-key', 'api-key': 'fabricated-other-key',
+    'x-auth-token': 'fabricated-auth-token', 'x-access-token': 'fabricated-access-token',
+    'x-atlas-key': 'fabricated-workspace-key', 'x-client-secret': 'fabricated-client-secret',
+    'x-authorization': 'fabricated-authorization', apikey: 'fabricated-key',
+  };
+  const result = await safeGet('https://safe.example/start', { headers: { ...credentials, Accept: 'application/json' } });
   assert.equal(lookups, 2);
   assert.equal(result.url, 'https://other.example/final');
-  assert.equal(requests[1].config.headers.Authorization, undefined);
-  assert.equal(requests[1].config.headers.Cookie, undefined);
+  for (const header of Object.keys(credentials)) {
+    assert.equal(requests[0].config.headers[header], credentials[header]);
+    assert.equal(requests[1].config.headers[header], undefined);
+  }
   assert.equal(requests[1].config.headers.Accept, 'application/json');
   assert.equal(requests[0].config.proxy, false);
   assert.equal(requests[0].config.maxRedirects, 0);
+});
+
+test('same-origin redirects retain API authentication headers', async (t) => {
+  const requests = [];
+  t.mock.method(client, 'get', async (url, config) => {
+    requests.push({ url, config });
+    return requests.length === 1
+      ? { status: 302, headers: { location: '/final' } }
+      : { status: 200, headers: {}, data: { ok: true } };
+  });
+  await safeGet('https://8.8.8.8/start', { headers: { 'x-api-key': 'fabricated-api-key' } });
+  assert.equal(requests[1].config.headers['x-api-key'], 'fabricated-api-key');
 });
 
 test('robots.txt redirects cannot request private addresses', async (t) => {

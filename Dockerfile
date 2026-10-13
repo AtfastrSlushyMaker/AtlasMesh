@@ -2,7 +2,7 @@
 #   docker build -t atlasmesh .
 #   docker run -p 127.0.0.1:3000:3000 -v atlasmesh-data:/app/server/data atlasmesh
 
-FROM node:24.19.0-bookworm-slim AS build
+FROM node:24.21.0-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY client/package.json client/
@@ -12,7 +12,11 @@ RUN npm ci --include=dev --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-FROM node:24.19.0-bookworm-slim
+FROM node:24.21.0-bookworm-slim
+# Apply Debian security fixes published after the base image was built.
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production \
     PORT=3000 \
     # Requests reach the app through Docker's bridge, not loopback, so allow
@@ -26,7 +30,11 @@ COPY package.json package-lock.json ./
 COPY client/package.json client/
 COPY server/package.json server/
 COPY server/start.cjs server/
-RUN npm ci --workspace server --omit=dev --no-audit --no-fund && npm cache clean --force
+RUN npm ci --workspace server --omit=dev --no-audit --no-fund \
+    && npm cache clean --force \
+    # The server starts with Node directly; package managers are build tools.
+    && rm -rf /usr/local/lib/node_modules/npm /opt/yarn-* \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/client/dist client/dist
 RUN mkdir -p server/data server/.cache && chown -R node:node server/data server/.cache

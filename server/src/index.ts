@@ -32,6 +32,7 @@ import { analystAvailable } from '../osint/analyst';
 import { settingsSummary, updateSettings } from '../services/config';
 import { testSetting } from '../services/settingsTest';
 import { accessKey, canEditSettings, isShowcase, REPO_URL, IMAGE } from '../lib/access';
+import { redactSecrets } from '../lib/secrets';
 import { sendSocketMessage } from '../lib/socket';
 
 const VERSION = '2.1.0';
@@ -265,7 +266,7 @@ interface SourceEntry extends SourceDef {
 
 const SOURCES: SourceEntry[] = [
   { id: 'aircraft', type: 'aircraft', label: 'Aircraft', provider: 'OpenSky Network', url: 'https://opensky-network.org', refreshMs: isAircraftAuthenticated() ? MIN : 15 * MIN, start: startAircraftSource, retention: { mode: 'snapshot', graceMs: 20 * MIN },
-    noteFn: () => (isAircraftAuthenticated() ? undefined : 'Anonymous access refreshes about every 15 minutes. Add OpenSky credentials in Settings for 1-minute updates.') } as any,
+    noteFn: () => (isAircraftAuthenticated() ? undefined : isShowcase() ? 'Anonymous access refreshes about every 15 minutes.' : 'Anonymous access refreshes about every 15 minutes. Add OpenSky credentials in Settings for 1-minute updates.') } as any,
   { id: 'ship', type: 'ship', label: 'Ships', provider: 'AISStream', url: 'https://aisstream.io', refreshMs: MIN, requires: ['AISSTREAM_TOKEN'], start: startAISSource, retention: { mode: 'stream', ttlMs: 30 * MIN } },
   { id: 'satellite', type: 'satellite', label: 'Satellites', provider: 'Celestrak', url: 'https://celestrak.org', refreshMs: 3 * HOUR, start: startSatellitesSource },
   { id: 'starlink', type: 'starlink', label: 'Starlink', provider: 'Celestrak', url: 'https://celestrak.org', refreshMs: 3 * HOUR, start: startStarlinkSource },
@@ -298,10 +299,15 @@ const LOG_TAGS: Record<string, string> = {
 };
 const originalWarn = console.warn.bind(console);
 console.warn = (...args: any[]) => {
-  originalWarn(...args);
+  originalWarn(...args.map((value) => {
+    if (typeof value === 'string') return redactSecrets(value);
+    if (value instanceof Error) return redactSecrets(value.stack || value.message);
+    try { return redactSecrets(JSON.stringify(value) ?? String(value)); }
+    catch { return '[unserializable warning]'; }
+  }));
   const m = typeof args[0] === 'string' ? args[0].match(/^\[([^\]]+)\]\s*(.*)/) : null;
   const id = m && LOG_TAGS[m[1].toLowerCase()];
-  if (id) sources.reportError(id, [m![2], ...args.slice(1)].join(' ').replace(/^Error:\s*/, '').slice(0, 200));
+  if (id) sources.reportError(id, [m![2], ...args.slice(1)].join(' ').replace(/^Error:\s*/, ''));
 };
 
 console.log(`\nAtlasMesh server ${VERSION}\n`);
@@ -413,9 +419,9 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('uncaughtException', (err) => {
   // Log and keep serving: one bad upstream payload should not take the globe down.
-  console.error('[Fatal] Uncaught exception:', err);
+  console.error('[Fatal] Uncaught exception:', redactSecrets(err.stack || err.message));
 });
-process.on('unhandledRejection', (reason) => console.error('[Fatal] Unhandled rejection:', reason));
+process.on('unhandledRejection', (reason) => console.error('[Fatal] Unhandled rejection:', redactSecrets(reason instanceof Error ? reason.stack || reason.message : String(reason))));
 
 const PORT = Number(process.env.PORT) || 3000;
 server.listen(PORT, () => {
